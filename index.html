@@ -393,10 +393,10 @@
     </div>
     <div class="two-col">
       <div class="callout callout-red">
-        <div><strong>Alcohol</strong> Every alcohol day shows itch ≥4. No exceptions in the dataset.</div>
+        <div id="insight-alcohol"></div>
       </div>
       <div class="callout callout-teal">
-        <div><strong>Vanicream</strong> Days using Vanicream shampoo/conditioner trend noticeably lower on average.</div>
+        <div id="insight-vanicream"></div>
       </div>
     </div>
   </div>
@@ -404,7 +404,7 @@
   <!-- ── VIEW 2: CYCLE ── -->
   <div id="view-cycle" class="view">
     <div class="callout callout-amber">
-      <div><strong>Estimated cycle start: June 6, 2026.</strong> Cycle days are calculated from this date. Ovulation estimated at day 14 (~Jun 20). Luteal window begins ~day 21.</div>
+      <div id="cycle-start-banner"></div>
     </div>
     <div class="stat-strip" id="strip-cycle"></div>
     <div class="card">
@@ -424,13 +424,13 @@
       </div>
       <div class="card" style="display:flex;flex-direction:column;justify-content:center;">
         <div class="callout callout-teal" style="margin-bottom:12px;">
-          <div><strong>Ovulation window (d14–19):</strong> consistently the lowest itch period in the dataset — 0 to 2 on most days.</div>
+          <div id="insight-ovulation"></div>
         </div>
         <div class="callout callout-amber">
-          <div><strong>Luteal phase (d20+):</strong> itch climbs sharply, matching the premenstrual progesterone-driven pattern described in APD literature.</div>
+          <div id="insight-luteal"></div>
         </div>
         <div class="callout callout-red">
-          <div><strong>Menses (d1–5):</strong> high itch during menstruation itself — a separate but related hormonal pattern.</div>
+          <div id="insight-menses"></div>
         </div>
       </div>
     </div>
@@ -486,7 +486,8 @@
 
 <script>
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQf2X1-Ccqh9LX4flxG7_vRYmvDZBVaYhb5gEmiCdWO13zZG3Fyu-ZsgWWD2nxqJ7fWuPCT2TKYnJP0/pub?gid=1902937528&single=true&output=csv';
-const CYCLE_START = new Date('2026-06-06');
+let CYCLE_START = new Date('2026-06-06'); // fallback until auto-detected from logged menstrual days
+let cycleStartDetected = false;
 
 // Chart.js defaults
 Chart.defaults.font.family = "'DM Sans', sans-serif";
@@ -512,6 +513,16 @@ function cyclePhase(day) {
   if (day <= 13) return 'follicular';
   if (day <= 19) return 'ovulation';
   return 'luteal';
+}
+function detectCycleStart(data) {
+  const menstrualDates = data.filter(r => r.menstrual && r.date).map(r => r.date).sort((a, b) => a - b);
+  if (!menstrualDates.length) return null;
+  let runStart = menstrualDates[0];
+  for (let i = 1; i < menstrualDates.length; i++) {
+    const gapDays = Math.round((menstrualDates[i] - menstrualDates[i - 1]) / 86400000);
+    if (gapDays > 2) runStart = menstrualDates[i];
+  }
+  return runStart;
 }
 function phaseColor(phase) {
   return { menses:'#B53030', follicular:'#1A5A9A', ovulation:'#1F6E56', luteal:'#B86E0A' }[phase] || '#888';
@@ -589,11 +600,15 @@ async function loadData() {
           menstrual: (row['Menstrual Cycle'] || '').toLowerCase() === 'yes',
           tempHi: parseFloat(row['Weather Temp High (°F)']) || null,
           humidity: parseFloat(row['Humidity (%)']) || null,
-          cycleDay: date && date >= CYCLE_START ? cycleDay(date) : null,
         };
       })
       .filter(r => r.date)
       .sort((a,b) => a.date - b.date);
+
+    const detected = detectCycleStart(allData);
+    cycleStartDetected = !!detected;
+    if (detected) CYCLE_START = detected;
+    allData.forEach(r => { r.cycleDay = r.date >= CYCLE_START ? cycleDay(r.date) : null; });
 
     document.getElementById('last-updated').textContent = 'Last fetched: ' + new Date().toLocaleTimeString();
     document.getElementById('entry-count').textContent = allData.length + ' entries';
@@ -629,6 +644,32 @@ function buildTimeline() {
     <div class="stat"><div class="stat-label">Low days</div><div class="stat-value" style="color:var(--teal)">${low}</div><div class="stat-sub">itch ≤ 2 (${Math.round(low/d.length*100)}%)</div></div>
     <div class="stat"><div class="stat-label">Alcohol days</div><div class="stat-value">${alcoholDays}</div><div class="stat-sub">of ${d.length} entries</div></div>
   `;
+
+  // Alcohol / Vanicream insight callouts
+  const alcoholOnArr = d.filter(r=>r.alcohol);
+  const alcoholOffArr = d.filter(r=>!r.alcohol);
+  const alcAtOrAbove4 = alcoholOnArr.filter(r=>r.itch>=4).length;
+  const alcEl = document.getElementById('insight-alcohol');
+  if (alcoholOnArr.length) {
+    const pct = Math.round(alcAtOrAbove4/alcoholOnArr.length*100);
+    const alcOnAvg = avg(alcoholOnArr.map(r=>r.itch));
+    const alcOffAvg = avg(alcoholOffArr.map(r=>r.itch));
+    alcEl.innerHTML = `<strong>Alcohol</strong> ${alcAtOrAbove4} of ${alcoholOnArr.length} alcohol days (${pct}%) show itch ≥4 — avg ${alcOnAvg.toFixed(1)} vs ${alcOffAvg?.toFixed(1)||'—'} without.${pct===100 ? ' No exceptions in the current dataset.' : ''}`;
+  } else {
+    alcEl.innerHTML = `<strong>Alcohol</strong> No alcohol days logged yet.`;
+  }
+
+  const vcOnArr = d.filter(r=>r.vanicream);
+  const vcOffArr = d.filter(r=>!r.vanicream);
+  const vcEl = document.getElementById('insight-vanicream');
+  if (vcOnArr.length && vcOffArr.length) {
+    const vcOnAvg = avg(vcOnArr.map(r=>r.itch));
+    const vcOffAvg = avg(vcOffArr.map(r=>r.itch));
+    const direction = vcOnAvg < vcOffAvg ? 'lower' : 'higher';
+    vcEl.innerHTML = `<strong>Vanicream</strong> Days using Vanicream shampoo/conditioner average ${vcOnAvg.toFixed(1)} itch vs ${vcOffAvg.toFixed(1)} on other days — ${Math.abs(vcOnAvg-vcOffAvg).toFixed(1)} points ${direction}.`;
+  } else {
+    vcEl.innerHTML = `<strong>Vanicream</strong> Not enough data yet to compare Vanicream vs other products.`;
+  }
 
   // Timeline chart
   destroyChart('timeline');
@@ -720,13 +761,51 @@ function buildCycle() {
     if (ph) phases[ph].push(r.itch);
   });
 
+  const fmtLong = dt => dt.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
+  const fmtShort = dt => dt.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+  const banner = document.getElementById('cycle-start-banner');
+  if (cycleStartDetected) {
+    const ovulationDate = new Date(CYCLE_START.getTime() + 13*86400000);
+    const lutealDate = new Date(CYCLE_START.getTime() + 20*86400000);
+    banner.innerHTML = `<strong>Estimated cycle start: ${fmtLong(CYCLE_START)}.</strong> Auto-detected from the most recent run of logged "Menstrual Cycle: Yes" days. Cycle days are calculated from this date — ovulation estimated at day 14 (~${fmtShort(ovulationDate)}), luteal window begins ~day 21 (~${fmtShort(lutealDate)}).`;
+  } else {
+    banner.innerHTML = `<strong>No cycle start detected yet.</strong> Log "Menstrual Cycle: Yes" for a few consecutive days on the sheet to let cycle-day estimates auto-calculate.`;
+  }
+
   document.getElementById('strip-cycle').innerHTML = `
-    <div class="stat"><div class="stat-label">Cycle entries</div><div class="stat-value">${cycData.length}</div><div class="stat-sub">since Jun 6</div></div>
+    <div class="stat"><div class="stat-label">Cycle entries</div><div class="stat-value">${cycData.length}</div><div class="stat-sub">since ${fmtShort(CYCLE_START)}</div></div>
     <div class="stat"><div class="stat-label">Menses avg</div><div class="stat-value" style="color:var(--red)">${avg(phases.menses)?.toFixed(1)||'—'}</div><div class="stat-sub">days 1–5</div></div>
     <div class="stat"><div class="stat-label">Follicular avg</div><div class="stat-value" style="color:var(--blue)">${avg(phases.follicular)?.toFixed(1)||'—'}</div><div class="stat-sub">days 6–13</div></div>
     <div class="stat"><div class="stat-label">Ovulation avg</div><div class="stat-value" style="color:var(--teal)">${avg(phases.ovulation)?.toFixed(1)||'—'}</div><div class="stat-sub">days 14–19</div></div>
     <div class="stat"><div class="stat-label">Luteal avg</div><div class="stat-value" style="color:var(--amber)">${avg(phases.luteal)?.toFixed(1)||'—'}</div><div class="stat-sub">days 20+</div></div>
   `;
+
+  // Phase insight callouts — recomputed from current data, not fixed prose
+  const phaseStats = {};
+  ['menses','follicular','ovulation','luteal'].forEach(p => {
+    const arr = phases[p];
+    phaseStats[p] = { avg: avg(arr), min: arr.length?Math.min(...arr):null, max: arr.length?Math.max(...arr):null, count: arr.length };
+  });
+  const ranked = ['menses','follicular','ovulation','luteal']
+    .filter(p => phaseStats[p].count > 0)
+    .sort((a,b) => phaseStats[a].avg - phaseStats[b].avg);
+  const lowestPhase = ranked[0];
+  const highestPhase = ranked[ranked.length-1];
+
+  const ovS = phaseStats.ovulation;
+  document.getElementById('insight-ovulation').innerHTML = ovS.count
+    ? `<strong>Ovulation window (d14–19):</strong> avg itch ${ovS.avg.toFixed(1)} across ${ovS.count} logged day${ovS.count===1?'':'s'} (range ${ovS.min}–${ovS.max}).${lowestPhase==='ovulation' ? ' Currently the lowest itch period in the dataset.' : ''}`
+    : `<strong>Ovulation window (d14–19):</strong> no logged days yet in this window.`;
+
+  const lutS = phaseStats.luteal;
+  document.getElementById('insight-luteal').innerHTML = lutS.count
+    ? `<strong>Luteal phase (d20+):</strong> avg itch ${lutS.avg.toFixed(1)} across ${lutS.count} logged day${lutS.count===1?'':'s'} (range ${lutS.min}–${lutS.max}).${highestPhase==='luteal' ? ' Currently the highest itch period in the dataset, consistent with the premenstrual pattern described in APD literature.' : ''}`
+    : `<strong>Luteal phase (d20+):</strong> no logged days yet in this window.`;
+
+  const menS = phaseStats.menses;
+  document.getElementById('insight-menses').innerHTML = menS.count
+    ? `<strong>Menses (d1–5):</strong> avg itch ${menS.avg.toFixed(1)} across ${menS.count} logged day${menS.count===1?'':'s'} (range ${menS.min}–${menS.max}).${highestPhase==='menses' ? ' Currently the highest itch period in the dataset.' : ''}`
+    : `<strong>Menses (d1–5):</strong> no logged days yet in this window.`;
 
   destroyChart('cycle');
   const ctx1 = document.getElementById('chart-cycle').getContext('2d');
