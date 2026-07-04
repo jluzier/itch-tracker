@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Itch Tracker Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:        #F7F5F0;
+    --surface:   #FFFFFF;
+    --border:    #E2DDD6;
+    --text-pri:  #1C1C1A;
+    --text-sec:  #6B6760;
+    --text-ter:  #A09C97;
+    --teal:      #1F6E56;
+    --teal-lt:   #E1F5EE;
+    --amber:     #B86E0A;
+    --amber-lt:  #FDF3E3;
+    --red:       #B53030;
+    --red-lt:    #FCEAEA;
+    --blue:      #1A5A9A;
+    --blue-lt:   #E6F0FB;
+    --chart-grid: rgba(0,0,0,0.05);
+    --radius:    10px;
+    --mono:      'DM Mono', monospace;
+    --sans:      'DM Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text-pri);
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--teal);
+    padding: 28px 32px 24px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .header-left h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: -0.3px;
+  }
+  .header-left p {
+    font-size: 12px;
+    color: rgba(255,255,255,0.65);
+    margin-top: 2px;
+    font-family: var(--mono);
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  #last-updated {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: rgba(255,255,255,0.6);
+  }
+  #refresh-btn {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  #refresh-btn:hover { background: rgba(255,255,255,0.25); }
+
+  /* ── Nav tabs ── */
+  nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+  }
+  nav button {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-sec);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 14px 20px 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  nav button:hover { color: var(--text-pri); }
+  nav button.active { color: var(--teal); border-bottom-color: var(--teal); }
+
+  /* ── Main layout ── */
+  main { padding: 28px 32px; max-width: 1200px; margin: 0 auto; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ── Stat strip ── */
+  .stat-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .stat-label {
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--text-ter);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--text-pri);
+    line-height: 1;
+  }
+  .stat-sub {
+    font-size: 11px;
+    color: var(--text-sec);
+    margin-top: 4px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    margin-bottom: 20px;
+  }
+  .card-title {
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--text-sec);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .chart-container { position: relative; height: 260px; }
+
+  /* ── Grid layouts ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  @media (max-width: 768px) {
+    .two-col, .three-col { grid-template-columns: 1fr; }
+    main { padding: 16px; }
+    nav { padding: 0 16px; }
+    header { padding: 20px 16px; }
+  }
+
+  /* ── Callout boxes ── */
+  .callout {
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .callout-teal  { background: var(--teal-lt);  border-left: 3px solid var(--teal); }
+  .callout-amber { background: var(--amber-lt); border-left: 3px solid var(--amber); }
+  .callout-red   { background: var(--red-lt);   border-left: 3px solid var(--red); }
+  .callout-blue  { background: var(--blue-lt);  border-left: 3px solid var(--blue); }
+  .callout strong { display: block; margin-bottom: 2px; }
+
+  /* ── Phase badge ── */
+  .phase-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-family: var(--mono);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .phase-menses   { background: #FCEAEA; color: var(--red); }
+  .phase-follicular { background: #E6F0FB; color: var(--blue); }
+  .phase-ovulation  { background: #E1F5EE; color: var(--teal); }
+  .phase-luteal     { background: #FDF3E3; color: var(--amber); }
+
+  /* ── Loading / error ── */
+  #loading-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 14px; z-index: 100;
+  }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--teal);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading-screen p { color: var(--text-sec); font-size: 13px; font-family: var(--mono); }
+
+  #error-banner {
+    display: none;
+    background: var(--red-lt);
+    border: 1px solid var(--red);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    color: var(--red);
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+
+  /* ── Diet table ── */
+  .diet-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .diet-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--bg);
+    color: var(--text-sec);
+    font-weight: 500;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+  }
+  .diet-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-pri);
+    vertical-align: top;
+  }
+  .diet-table tr:last-child td { border-bottom: none; }
+  .diet-table tr:hover td { background: var(--bg); }
+  .itch-pill {
+    display: inline-block;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 28px;
+    font-weight: 600;
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    margin-top: 10px; font-size: 11px; color: var(--text-sec);
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+  .legend-line { width: 18px; height: 2px; }
+</style>
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <p>Loading tracker data…</p>
+</div>
+
+<header>
+  <div class="header-left">
+    <h1>Itch Tracker</h1>
+    <p id="last-updated">Fetching data…</p>
+  </div>
+  <div class="header-right">
+    <span id="entry-count" style="font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.6);"></span>
+    <button id="refresh-btn" onclick="loadData()">↻ Refresh</button>
+  </div>
+</header>
+
+<nav>
+  <button class="active" onclick="switchView('timeline')">Itch Timeline</button>
+  <button onclick="switchView('cycle')">Cycle Mapping</button>
+  <button onclick="switchView('diet')">Diet Consistency</button>
+</nav>
+
+<main>
+  <div id="error-banner"></div>
+
+  <!-- ── VIEW 1: TIMELINE ── -->
+  <div id="view-timeline" class="view active">
+    <div class="stat-strip" id="strip-timeline"></div>
+    <div class="card">
+      <div class="card-title">
+        Itch level over time
+        <span style="font-size:11px;color:var(--text-ter);">Blue dots = alcohol day</span>
+      </div>
+      <div class="chart-container"><canvas id="chart-timeline"></canvas></div>
+      <div class="legend" style="margin-top:12px;">
+        <div class="legend-item"><div class="legend-dot" style="background:#B53030;"></div> Severe (7–10)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#B86E0A;"></div> Moderate (4–6)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#1F6E56;"></div> Low (0–3)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#1A5A9A;"></div> Alcohol day</div>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Peak time of day</div>
+        <div class="chart-container" style="height:200px;"><canvas id="chart-peaktime"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Itch distribution</div>
+        <div class="chart-container" style="height:200px;"><canvas id="chart-dist"></canvas></div>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="callout callout-red">
+        <div><strong>Alcohol</strong> Every alcohol day shows itch ≥4. No exceptions in the dataset.</div>
+      </div>
+      <div class="callout callout-teal">
+        <div><strong>Vanicream</strong> Days using Vanicream shampoo/conditioner trend noticeably lower on average.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── VIEW 2: CYCLE ── -->
+  <div id="view-cycle" class="view">
+    <div class="callout callout-amber">
+      <div><strong>Estimated cycle start: June 6, 2026.</strong> Cycle days are calculated from this date. Ovulation estimated at day 14 (~Jun 20). Luteal window begins ~day 21.</div>
+    </div>
+    <div class="stat-strip" id="strip-cycle"></div>
+    <div class="card">
+      <div class="card-title">Itch level by estimated cycle day</div>
+      <div class="chart-container" style="height:280px;"><canvas id="chart-cycle"></canvas></div>
+      <div class="legend" style="margin-top:12px;">
+        <div class="legend-item"><div class="legend-dot" style="background:#B53030;"></div> Menses (d1–5)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#1A5A9A;"></div> Follicular (d6–13)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#1F6E56;"></div> Ovulation window (d14–19)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#B86E0A;"></div> Luteal / pre-period (d20+)</div>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Avg itch by cycle phase</div>
+        <div class="chart-container" style="height:200px;"><canvas id="chart-phase"></canvas></div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;justify-content:center;">
+        <div class="callout callout-teal" style="margin-bottom:12px;">
+          <div><strong>Ovulation window (d14–19):</strong> consistently the lowest itch period in the dataset — 0 to 2 on most days.</div>
+        </div>
+        <div class="callout callout-amber">
+          <div><strong>Luteal phase (d20+):</strong> itch climbs sharply, matching the premenstrual progesterone-driven pattern described in APD literature.</div>
+        </div>
+        <div class="callout callout-red">
+          <div><strong>Menses (d1–5):</strong> high itch during menstruation itself — a separate but related hormonal pattern.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── VIEW 3: DIET ── -->
+  <div id="view-diet" class="view">
+    <div class="stat-strip" id="strip-diet"></div>
+    <div class="card">
+      <div class="card-title">Diet factor presence vs avg itch level</div>
+      <div class="chart-container" style="height:240px;"><canvas id="chart-factors"></canvas></div>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Avg itch: alcohol vs no alcohol</div>
+        <div class="chart-container" style="height:180px;"><canvas id="chart-alcohol"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Avg itch: Vanicream vs other products</div>
+        <div class="chart-container" style="height:180px;"><canvas id="chart-vanicream"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Daily log — food & itch <span style="font-size:11px;color:var(--text-ter);">most recent first</span></div>
+      <div style="overflow-x:auto;">
+        <table class="diet-table" id="diet-log-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Itch</th>
+              <th>Alcohol</th>
+              <th>Vanicream</th>
+              <th>Food logged</th>
+            </tr>
+          </thead>
+          <tbody id="diet-log-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQf2X1-Ccqh9LX4flxG7_vRYmvDZBVaYhb5gEmiCdWO13zZG3Fyu-ZsgWWD2nxqJ7fWuPCT2TKYnJP0/pub?gid=1902937528&single=true&output=csv';
+const CYCLE_START = new Date('2026-06-06');
+
+// Chart.js defaults
+Chart.defaults.font.family = "'DM Sans', sans-serif";
+Chart.defaults.font.size = 11;
+Chart.defaults.color = '#6B6760';
+
+let charts = {};
+let allData = [];
+
+// ── Helpers ────────────────────────────────────────────
+function parseDate(str) {
+  const d = new Date(str);
+  return isNaN(d) ? null : d;
+}
+function cycleDay(date) {
+  if (!date) return null;
+  const diff = Math.floor((date - CYCLE_START) / 86400000) + 1;
+  return diff >= 1 ? diff : null;
+}
+function cyclePhase(day) {
+  if (!day) return null;
+  if (day <= 5)  return 'menses';
+  if (day <= 13) return 'follicular';
+  if (day <= 19) return 'ovulation';
+  return 'luteal';
+}
+function phaseColor(phase) {
+  return { menses:'#B53030', follicular:'#1A5A9A', ovulation:'#1F6E56', luteal:'#B86E0A' }[phase] || '#888';
+}
+function itchColor(v) {
+  if (v >= 7) return '#B53030';
+  if (v >= 4) return '#B86E0A';
+  return '#1F6E56';
+}
+function avg(arr) {
+  return arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length) : null;
+}
+function isSweet(food) {
+  if (!food) return false;
+  const s = food.toLowerCase();
+  return ['tootsie','chocolate','candy','pudding','pie','cake','cookie','brownie','nutella','coke','pepsi','sugar','sweet','ice cream','frozen yogurt','twix','junior mint','scone','waffle','eggo'].some(w=>s.includes(w));
+}
+function gridOpts() {
+  return { color: 'rgba(0,0,0,0.05)', drawBorder: false };
+}
+function tickOpts() { return { color: '#A09C97' }; }
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+// ── Data load ──────────────────────────────────────────
+async function loadData() {
+  document.getElementById('loading-screen').style.display = 'flex';
+  document.getElementById('error-banner').style.display = 'none';
+  try {
+    const res = await fetch(CSV_URL + '&t=' + Date.now());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+    allData = parsed.data
+      .map(row => {
+        const date = parseDate(row['Timestamp']);
+        const itch = parseFloat(row['Itch Level']) || 0;
+        return {
+          date, itch,
+          location: row['Itch Location'] || '',
+          peakTime: row['Time of Day Itch Peaks'] || '',
+          food: row['Food Eaten Today'] || '',
+          alcohol: (row['Alcohol Consumed'] || '').toLowerCase() === 'yes',
+          hydration: parseFloat(row['Hydration Level']) || null,
+          stress: parseFloat(row['Stress Level']) || null,
+          sleep: parseFloat(row['Sleep Quality Last Night']) || null,
+          vanicream: (row['Vanicream Shampoo/Conditioner Used'] || '').toLowerCase() === 'yes',
+          notes: row['General Notes'] || '',
+          menstrual: (row['Menstrual Cycle'] || '').toLowerCase() === 'yes',
+          tempHi: parseFloat(row['Weather Temp High (°F)']) || null,
+          humidity: parseFloat(row['Humidity (%)']) || null,
+          cycleDay: date && date >= CYCLE_START ? cycleDay(date) : null,
+        };
+      })
+      .filter(r => r.date)
+      .sort((a,b) => a.date - b.date);
+
+    document.getElementById('last-updated').textContent = 'Last fetched: ' + new Date().toLocaleTimeString();
+    document.getElementById('entry-count').textContent = allData.length + ' entries';
+    buildAll();
+  } catch(e) {
+    const banner = document.getElementById('error-banner');
+    banner.textContent = 'Could not load data: ' + e.message + '. Check that the sheet is published to web.';
+    banner.style.display = 'block';
+  } finally {
+    document.getElementById('loading-screen').style.display = 'none';
+  }
+}
+
+// ── Build all views ────────────────────────────────────
+function buildAll() {
+  buildTimeline();
+  buildCycle();
+  buildDiet();
+}
+
+// ── VIEW 1: Timeline ───────────────────────────────────
+function buildTimeline() {
+  const d = allData;
+  const avgItch = avg(d.map(r=>r.itch));
+  const severe = d.filter(r=>r.itch>=7).length;
+  const low = d.filter(r=>r.itch<=2).length;
+  const alcoholDays = d.filter(r=>r.alcohol).length;
+
+  document.getElementById('strip-timeline').innerHTML = `
+    <div class="stat"><div class="stat-label">Entries</div><div class="stat-value">${d.length}</div><div class="stat-sub">days logged</div></div>
+    <div class="stat"><div class="stat-label">Avg itch</div><div class="stat-value" style="color:${itchColor(avgItch)}">${avgItch.toFixed(1)}</div><div class="stat-sub">out of 10</div></div>
+    <div class="stat"><div class="stat-label">Severe days</div><div class="stat-value" style="color:var(--red)">${severe}</div><div class="stat-sub">itch ≥ 7 (${Math.round(severe/d.length*100)}%)</div></div>
+    <div class="stat"><div class="stat-label">Low days</div><div class="stat-value" style="color:var(--teal)">${low}</div><div class="stat-sub">itch ≤ 2 (${Math.round(low/d.length*100)}%)</div></div>
+    <div class="stat"><div class="stat-label">Alcohol days</div><div class="stat-value">${alcoholDays}</div><div class="stat-sub">of ${d.length} entries</div></div>
+  `;
+
+  // Timeline chart
+  destroyChart('timeline');
+  const ctx1 = document.getElementById('chart-timeline').getContext('2d');
+  charts['timeline'] = new Chart(ctx1, {
+    type: 'line',
+    data: {
+      labels: d.map(r => r.date.toLocaleDateString('en-US',{month:'short',day:'numeric'})),
+      datasets: [{
+        data: d.map(r=>r.itch),
+        borderColor: '#1F6E56',
+        backgroundColor: 'rgba(31,110,86,0.07)',
+        pointBackgroundColor: d.map(r => r.alcohol ? '#1A5A9A' : itchColor(r.itch)),
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        fill: true,
+        tension: 0.35,
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: (c) => {
+          const r = d[c.dataIndex];
+          const parts = [`Itch: ${r.itch}`];
+          if (r.alcohol) parts.push('Alcohol: yes');
+          if (r.notes) parts.push(r.notes.substring(0,50));
+          return parts;
+        }}}
+      },
+      scales: {
+        x: { ticks: { ...tickOpts(), maxRotation: 45, autoSkip: true }, grid: gridOpts() },
+        y: { min: 0, max: 10, ticks: tickOpts(), grid: gridOpts() }
+      }
+    }
+  });
+
+  // Peak time chart
+  const peaks = {};
+  d.forEach(r => {
+    const t = (r.peakTime||'').trim() || 'Not logged';
+    peaks[t] = (peaks[t]||0)+1;
+  });
+  destroyChart('peaktime');
+  const ctx2 = document.getElementById('chart-peaktime').getContext('2d');
+  charts['peaktime'] = new Chart(ctx2, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(peaks),
+      datasets: [{ data: Object.values(peaks),
+        backgroundColor: ['#1F6E56','#B86E0A','#B53030','#1A5A9A','#A09C97','#6B6760'],
+        borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { font:{size:10}, boxWidth: 10 } } }
+    }
+  });
+
+  // Distribution histogram
+  const bins = [0,0,0,0,0,0,0,0,0,0,0];
+  d.forEach(r => { const i = Math.min(Math.round(r.itch),10); bins[i]++; });
+  destroyChart('dist');
+  const ctx3 = document.getElementById('chart-dist').getContext('2d');
+  charts['dist'] = new Chart(ctx3, {
+    type: 'bar',
+    data: {
+      labels: bins.map((_,i)=>i),
+      datasets: [{ data: bins,
+        backgroundColor: bins.map((_,i) => i>=7?'#B53030': i>=4?'#B86E0A':'#1F6E56'),
+        borderRadius: 3, borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c=>`${c.raw} days at itch ${c.label}` } } },
+      scales: {
+        x: { title:{display:true,text:'Itch level',color:'#A09C97',font:{size:10}}, ticks:tickOpts(), grid:gridOpts() },
+        y: { ticks:tickOpts(), grid:gridOpts() }
+      }
+    }
+  });
+}
+
+// ── VIEW 2: Cycle ──────────────────────────────────────
+function buildCycle() {
+  const cycData = allData.filter(r => r.cycleDay !== null);
+  const phases = { menses:[], follicular:[], ovulation:[], luteal:[] };
+  cycData.forEach(r => {
+    const ph = cyclePhase(r.cycleDay);
+    if (ph) phases[ph].push(r.itch);
+  });
+
+  document.getElementById('strip-cycle').innerHTML = `
+    <div class="stat"><div class="stat-label">Cycle entries</div><div class="stat-value">${cycData.length}</div><div class="stat-sub">since Jun 6</div></div>
+    <div class="stat"><div class="stat-label">Menses avg</div><div class="stat-value" style="color:var(--red)">${avg(phases.menses)?.toFixed(1)||'—'}</div><div class="stat-sub">days 1–5</div></div>
+    <div class="stat"><div class="stat-label">Follicular avg</div><div class="stat-value" style="color:var(--blue)">${avg(phases.follicular)?.toFixed(1)||'—'}</div><div class="stat-sub">days 6–13</div></div>
+    <div class="stat"><div class="stat-label">Ovulation avg</div><div class="stat-value" style="color:var(--teal)">${avg(phases.ovulation)?.toFixed(1)||'—'}</div><div class="stat-sub">days 14–19</div></div>
+    <div class="stat"><div class="stat-label">Luteal avg</div><div class="stat-value" style="color:var(--amber)">${avg(phases.luteal)?.toFixed(1)||'—'}</div><div class="stat-sub">days 20+</div></div>
+  `;
+
+  destroyChart('cycle');
+  const ctx1 = document.getElementById('chart-cycle').getContext('2d');
+  charts['cycle'] = new Chart(ctx1, {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        data: cycData.map(r=>({x:r.cycleDay, y:r.itch, date:r.date, phase:cyclePhase(r.cycleDay)})),
+        pointBackgroundColor: cycData.map(r=>phaseColor(cyclePhase(r.cycleDay))),
+        pointRadius: 7, pointHoverRadius: 9,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => {
+          const d = c.raw;
+          return [`Day ${d.x}: itch ${d.y}`, d.date.toLocaleDateString('en-US',{month:'short',day:'numeric'})];
+        }}}
+      },
+      scales: {
+        x: { type:'linear', min:0, max:32,
+          title:{display:true,text:'Estimated cycle day',color:'#A09C97',font:{size:10}},
+          ticks:{ ...tickOpts(), stepSize:2 }, grid:gridOpts(),
+          // Phase background via annotation-like approach using afterDraw
+        },
+        y: { min:0, max:10, title:{display:true,text:'Itch level',color:'#A09C97',font:{size:10}}, ticks:tickOpts(), grid:gridOpts() }
+      },
+      // Draw phase bands
+      plugins: [{ id:'phaseBands', beforeDraw(chart) {
+        const {ctx, chartArea, scales:{x,y}} = chart;
+        if (!chartArea) return;
+        ctx.save();
+        const bands = [
+          {from:1,to:5,  color:'rgba(181,48,48,0.07)'},
+          {from:5,to:13, color:'rgba(26,90,154,0.07)'},
+          {from:13,to:20,color:'rgba(31,110,86,0.07)'},
+          {from:20,to:32,color:'rgba(184,110,10,0.07)'},
+        ];
+        bands.forEach(b=>{
+          const left = x.getPixelForValue(b.from);
+          const right = x.getPixelForValue(b.to);
+          ctx.fillStyle = b.color;
+          ctx.fillRect(left, chartArea.top, right-left, chartArea.height);
+        });
+        ctx.restore();
+      }}]
+    }
+  });
+
+  destroyChart('phase');
+  const ctx2 = document.getElementById('chart-phase').getContext('2d');
+  charts['phase'] = new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels: ['Menses', 'Follicular', 'Ovulation', 'Luteal'],
+      datasets: [{
+        data: ['menses','follicular','ovulation','luteal'].map(p=>avg(phases[p])?.toFixed(1)||0),
+        backgroundColor: ['#B53030','#1A5A9A','#1F6E56','#B86E0A'],
+        borderRadius: 4, borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>`Avg itch: ${c.raw}`}} },
+      scales: {
+        x: { ticks:tickOpts(), grid:gridOpts() },
+        y: { min:0, max:10, ticks:tickOpts(), grid:gridOpts() }
+      }
+    }
+  });
+}
+
+// ── VIEW 3: Diet ───────────────────────────────────────
+function buildDiet() {
+  const d = allData;
+  const alcoholOn  = d.filter(r=>r.alcohol);
+  const alcoholOff = d.filter(r=>!r.alcohol);
+  const vcOn  = d.filter(r=>r.vanicream);
+  const vcOff = d.filter(r=>!r.vanicream);
+  const sweetOn  = d.filter(r=>isSweet(r.food));
+  const sweetOff = d.filter(r=>!isSweet(r.food));
+
+  document.getElementById('strip-diet').innerHTML = `
+    <div class="stat"><div class="stat-label">Alcohol days avg</div><div class="stat-value" style="color:var(--red)">${avg(alcoholOn.map(r=>r.itch))?.toFixed(1)||'—'}</div><div class="stat-sub">vs ${avg(alcoholOff.map(r=>r.itch))?.toFixed(1)||'—'} without</div></div>
+    <div class="stat"><div class="stat-label">Vanicream avg</div><div class="stat-value" style="color:var(--teal)">${avg(vcOn.map(r=>r.itch))?.toFixed(1)||'—'}</div><div class="stat-sub">vs ${avg(vcOff.map(r=>r.itch))?.toFixed(1)||'—'} other products</div></div>
+    <div class="stat"><div class="stat-label">Sweets present avg</div><div class="stat-value" style="color:var(--amber)">${avg(sweetOn.map(r=>r.itch))?.toFixed(1)||'—'}</div><div class="stat-sub">vs ${avg(sweetOff.map(r=>r.itch))?.toFixed(1)||'—'} without</div></div>
+    <div class="stat"><div class="stat-label">Sweets frequency</div><div class="stat-value">${Math.round(sweetOn.length/d.length*100)}%</div><div class="stat-sub">of all logged days</div></div>
+  `;
+
+  // Factors chart
+  destroyChart('factors');
+  const ctx1 = document.getElementById('chart-factors').getContext('2d');
+  charts['factors'] = new Chart(ctx1, {
+    type: 'bar',
+    data: {
+      labels: ['Alcohol\n(yes)', 'Alcohol\n(no)', 'Vanicream\n(yes)', 'Vanicream\n(no)', 'Sweets\n(yes)', 'Sweets\n(no)'],
+      datasets: [{
+        data: [
+          avg(alcoholOn.map(r=>r.itch))?.toFixed(1),
+          avg(alcoholOff.map(r=>r.itch))?.toFixed(1),
+          avg(vcOn.map(r=>r.itch))?.toFixed(1),
+          avg(vcOff.map(r=>r.itch))?.toFixed(1),
+          avg(sweetOn.map(r=>r.itch))?.toFixed(1),
+          avg(sweetOff.map(r=>r.itch))?.toFixed(1),
+        ],
+        backgroundColor: ['#B53030','#1F6E56','#1F6E56','#B86E0A','#B86E0A','#1F6E56'],
+        borderRadius: 4, borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>`Avg itch: ${c.raw}`}} },
+      scales: {
+        x: { ticks:{...tickOpts(),font:{size:10}}, grid:gridOpts() },
+        y: { min:0, max:10, ticks:tickOpts(), grid:gridOpts(), title:{display:true,text:'Avg itch level',color:'#A09C97',font:{size:10}} }
+      }
+    }
+  });
+
+  // Alcohol bar
+  destroyChart('alcohol');
+  const ctx2 = document.getElementById('chart-alcohol').getContext('2d');
+  charts['alcohol'] = new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels: ['Alcohol days', 'No alcohol'],
+      datasets: [{ data: [avg(alcoholOn.map(r=>r.itch))?.toFixed(1), avg(alcoholOff.map(r=>r.itch))?.toFixed(1)],
+        backgroundColor: ['#B53030','#1F6E56'], borderRadius: 4, borderWidth: 0 }]
+    },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`Avg itch: ${c.raw}`}}},
+      scales:{ x:{ticks:tickOpts(),grid:gridOpts()}, y:{min:0,max:10,ticks:tickOpts(),grid:gridOpts()} }
+    }
+  });
+
+  // Vanicream bar
+  destroyChart('vanicream');
+  const ctx3 = document.getElementById('chart-vanicream').getContext('2d');
+  charts['vanicream'] = new Chart(ctx3, {
+    type: 'bar',
+    data: {
+      labels: ['Vanicream', 'Other/none'],
+      datasets: [{ data: [avg(vcOn.map(r=>r.itch))?.toFixed(1), avg(vcOff.map(r=>r.itch))?.toFixed(1)],
+        backgroundColor: ['#1F6E56','#A09C97'], borderRadius: 4, borderWidth: 0 }]
+    },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`Avg itch: ${c.raw}`}}},
+      scales:{ x:{ticks:tickOpts(),grid:gridOpts()}, y:{min:0,max:10,ticks:tickOpts(),grid:gridOpts()} }
+    }
+  });
+
+  // Diet log table — most recent first
+  const tbody = document.getElementById('diet-log-body');
+  const sorted = [...d].reverse();
+  tbody.innerHTML = sorted.map(r => {
+    const iv = Math.round(r.itch);
+    const bg = iv>=7?'#B53030': iv>=4?'#B86E0A':'#1F6E56';
+    const food = r.food.length > 80 ? r.food.substring(0,80)+'…' : r.food;
+    return `<tr>
+      <td style="font-family:var(--mono);white-space:nowrap;">${r.date.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</td>
+      <td><span class="itch-pill" style="background:${bg}20;color:${bg}">${iv}</span></td>
+      <td style="color:${r.alcohol?'var(--red)':'var(--text-ter)'}">${r.alcohol?'Yes':'No'}</td>
+      <td style="color:${r.vanicream?'var(--teal)':'var(--text-ter)'}">${r.vanicream?'Yes':'No'}</td>
+      <td style="color:var(--text-sec);font-size:12px;">${food||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Tab switching ──────────────────────────────────────
+function switchView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// ── Init ───────────────────────────────────────────────
+loadData();
+// Auto-refresh every 5 minutes
+setInterval(loadData, 5 * 60 * 1000);
+</script>
+</body>
+</html>
