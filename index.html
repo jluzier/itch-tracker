@@ -10,9 +10,9 @@
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
   :root {
-    --bg:        #F7F5F0;
+    --bg:        #E9EAEC;
     --surface:   #FFFFFF;
-    --border:    #E2DDD6;
+    --border:    #DDDEE1;
     --text-pri:  #1C1C1A;
     --text-sec:  #6B6760;
     --text-ter:  #A09C97;
@@ -24,6 +24,7 @@
     --red-lt:    #FCEAEA;
     --blue:      #1A5A9A;
     --blue-lt:   #E6F0FB;
+    --navy:      #16294F;
     --chart-grid: rgba(0,0,0,0.05);
     --radius:    10px;
     --mono:      'DM Mono', monospace;
@@ -43,7 +44,7 @@
 
   /* ── Header ── */
   header {
-    background: var(--teal);
+    background: var(--navy);
     padding: 28px 32px 24px;
     display: flex;
     align-items: flex-end;
@@ -62,6 +63,24 @@
     color: rgba(255,255,255,0.65);
     margin-top: 2px;
     font-family: var(--mono);
+  }
+  .header-links {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .header-links a {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.85);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255,255,255,0.35);
+    padding-bottom: 1px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .header-links a:hover {
+    color: #fff;
+    border-color: rgba(255,255,255,0.8);
   }
   .header-right {
     display: flex;
@@ -110,7 +129,7 @@
     transition: color 0.15s, border-color 0.15s;
   }
   nav button:hover { color: var(--text-pri); }
-  nav button.active { color: var(--teal); border-bottom-color: var(--teal); }
+  nav button.active { color: var(--navy); border-bottom-color: var(--navy); }
 
   /* ── Main layout ── */
   main { padding: 28px 32px; max-width: 1200px; margin: 0 auto; }
@@ -162,7 +181,8 @@
   .card-title {
     font-size: 12px;
     font-family: var(--mono);
-    color: var(--text-sec);
+    font-weight: 700;
+    color: var(--text-pri);
     text-transform: uppercase;
     letter-spacing: 0.07em;
     margin-bottom: 16px;
@@ -296,6 +316,10 @@
     <p id="last-updated">Fetching data…</p>
   </div>
   <div class="header-right">
+    <div class="header-links">
+      <a href="https://docs.google.com/forms/d/e/1FAIpQLSfxMOUkz_QCombovSr3m9tqOQqY2WLTcfNuxTi3ZAFQ9Bwv9A/viewform" target="_blank" rel="noopener">Daily Tracking Form</a>
+      <a href="https://docs.google.com/spreadsheets/d/1ML-pD4w8UX7ZAJtpgWLPhnX72q3EXohqr2TTDyzDHHI/edit?usp=sharing" target="_blank" rel="noopener">Source Data</a>
+    </div>
     <span id="entry-count" style="font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.6);"></span>
     <button id="refresh-btn" onclick="loadData()">↻ Refresh</button>
   </div>
