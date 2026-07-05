@@ -443,14 +443,17 @@
         <div class="chart-container" style="height:200px;"><canvas id="chart-phase"></canvas></div>
       </div>
       <div class="card" style="display:flex;flex-direction:column;justify-content:center;">
+        <div class="callout callout-red" style="margin-bottom:12px;">
+          <div id="insight-menses"></div>
+        </div>
+        <div class="callout callout-blue" style="margin-bottom:12px;">
+          <div id="insight-follicular"></div>
+        </div>
         <div class="callout callout-teal" style="margin-bottom:12px;">
           <div id="insight-ovulation"></div>
         </div>
         <div class="callout callout-amber">
           <div id="insight-luteal"></div>
-        </div>
-        <div class="callout callout-red">
-          <div id="insight-menses"></div>
         </div>
       </div>
     </div>
@@ -811,7 +814,7 @@ function buildCycle() {
   if (!range) {
     banner.innerHTML = `<strong>No cycle start detected yet.</strong> Log "Menstrual Cycle: Yes" for a few consecutive days on the sheet to let cycle-day estimates auto-calculate.`;
     document.getElementById('strip-cycle').innerHTML = '';
-    ['insight-ovulation','insight-luteal','insight-menses'].forEach(id => document.getElementById(id).innerHTML = '');
+    ['insight-menses','insight-follicular','insight-ovulation','insight-luteal'].forEach(id => document.getElementById(id).innerHTML = '');
     destroyChart('cycle');
     destroyChart('phase');
     return;
@@ -853,6 +856,16 @@ function buildCycle() {
   const lowestPhase = ranked[0];
   const highestPhase = ranked[ranked.length-1];
 
+  const menS = phaseStats.menses;
+  document.getElementById('insight-menses').innerHTML = menS.count
+    ? `<strong>Menses (d1–5):</strong> avg itch ${menS.avg.toFixed(1)} across ${menS.count} logged day${menS.count===1?'':'s'} (range ${menS.min}–${menS.max}).${highestPhase==='menses' ? ' Currently the highest itch period in this cycle.' : ''}`
+    : `<strong>Menses (d1–5):</strong> no logged days yet in this window.`;
+
+  const folS = phaseStats.follicular;
+  document.getElementById('insight-follicular').innerHTML = folS.count
+    ? `<strong>Follicular phase (d6–13):</strong> avg itch ${folS.avg.toFixed(1)} across ${folS.count} logged day${folS.count===1?'':'s'} (range ${folS.min}–${folS.max}).${lowestPhase==='follicular' ? ' Currently the lowest itch period in this cycle.' : ''}${highestPhase==='follicular' ? ' Currently the highest itch period in this cycle.' : ''}`
+    : `<strong>Follicular phase (d6–13):</strong> no logged days yet in this window.`;
+
   const ovS = phaseStats.ovulation;
   document.getElementById('insight-ovulation').innerHTML = ovS.count
     ? `<strong>Ovulation window (d14–19):</strong> avg itch ${ovS.avg.toFixed(1)} across ${ovS.count} logged day${ovS.count===1?'':'s'} (range ${ovS.min}–${ovS.max}).${lowestPhase==='ovulation' ? ' Currently the lowest itch period in this cycle.' : ''}`
@@ -862,11 +875,6 @@ function buildCycle() {
   document.getElementById('insight-luteal').innerHTML = lutS.count
     ? `<strong>Luteal phase (d20+):</strong> avg itch ${lutS.avg.toFixed(1)} across ${lutS.count} logged day${lutS.count===1?'':'s'} (range ${lutS.min}–${lutS.max}).${highestPhase==='luteal' ? ' Currently the highest itch period in this cycle, consistent with the premenstrual pattern described in APD literature.' : ''}`
     : `<strong>Luteal phase (d20+):</strong> no logged days yet in this window.`;
-
-  const menS = phaseStats.menses;
-  document.getElementById('insight-menses').innerHTML = menS.count
-    ? `<strong>Menses (d1–5):</strong> avg itch ${menS.avg.toFixed(1)} across ${menS.count} logged day${menS.count===1?'':'s'} (range ${menS.min}–${menS.max}).${highestPhase==='menses' ? ' Currently the highest itch period in this cycle.' : ''}`
-    : `<strong>Menses (d1–5):</strong> no logged days yet in this window.`;
 
   const maxDay = Math.max(32, ...cycData.map(r=>r.cycleDay));
 
