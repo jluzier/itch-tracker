@@ -351,6 +351,7 @@
       <a href="APD_Summary.docx" target="_blank" rel="noopener">APD Summary</a>
       <a href="https://docs.google.com/spreadsheets/d/1ML-pD4w8UX7ZAJtpgWLPhnX72q3EXohqr2TTDyzDHHI/edit?usp=sharing" target="_blank" rel="noopener">Source Data</a>
     </div>
+    <span id="last-entry" style="font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.75);"></span>
     <span id="entry-count" style="font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.6);"></span>
     <button id="refresh-btn" onclick="loadData()">↻ Refresh</button>
   </div>
@@ -612,6 +613,13 @@ async function loadData() {
 
     document.getElementById('last-updated').textContent = 'Last fetched: ' + new Date().toLocaleTimeString();
     document.getElementById('entry-count').textContent = allData.length + ' entries';
+
+    const lastEntry = allData[allData.length - 1];
+    const lastEntryEl = document.getElementById('last-entry');
+    lastEntryEl.innerHTML = lastEntry
+      ? `Last log: ${lastEntry.date.toLocaleDateString('en-US',{month:'short',day:'numeric'})} · itch <strong style="color:${itchColor(lastEntry.itch)}">${lastEntry.itch}</strong>`
+      : '';
+
     buildAll();
   } catch(e) {
     const banner = document.getElementById('error-banner');
