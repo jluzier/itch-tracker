@@ -897,27 +897,27 @@ function buildCycle() {
           // Phase background via annotation-like approach using afterDraw
         },
         y: { min:0, max:10, title:{display:true,text:'Itch level',color:'#A09C97',font:{size:10}}, ticks:tickOpts(), grid:gridOpts() }
-      },
-      // Draw phase bands
-      plugins: [{ id:'phaseBands', beforeDraw(chart) {
-        const {ctx, chartArea, scales:{x,y}} = chart;
-        if (!chartArea) return;
-        ctx.save();
-        const bands = [
-          {from:1,to:5,  color:'rgba(181,48,48,0.07)'},
-          {from:5,to:13, color:'rgba(26,90,154,0.07)'},
-          {from:13,to:20,color:'rgba(31,110,86,0.07)'},
-          {from:20,to:maxDay,color:'rgba(184,110,10,0.07)'},
-        ];
-        bands.forEach(b=>{
-          const left = x.getPixelForValue(b.from);
-          const right = x.getPixelForValue(b.to);
-          ctx.fillStyle = b.color;
-          ctx.fillRect(left, chartArea.top, right-left, chartArea.height);
-        });
-        ctx.restore();
-      }}]
-    }
+      }
+    },
+    // Draw phase bands — must be a top-level plugins array, not nested under options.plugins
+    plugins: [{ id:'phaseBands', beforeDraw(chart) {
+      const {ctx, chartArea, scales:{x,y}} = chart;
+      if (!chartArea) return;
+      ctx.save();
+      const bands = [
+        {from:1,to:5,  color:'rgba(181,48,48,0.07)'},
+        {from:5,to:13, color:'rgba(26,90,154,0.07)'},
+        {from:13,to:20,color:'rgba(31,110,86,0.07)'},
+        {from:20,to:maxDay,color:'rgba(184,110,10,0.07)'},
+      ];
+      bands.forEach(b=>{
+        const left = x.getPixelForValue(b.from);
+        const right = x.getPixelForValue(b.to);
+        ctx.fillStyle = b.color;
+        ctx.fillRect(left, chartArea.top, right-left, chartArea.height);
+      });
+      ctx.restore();
+    }}]
   });
 
   destroyChart('phase');
