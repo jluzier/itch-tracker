@@ -131,6 +131,24 @@
   nav button:hover { color: var(--text-pri); }
   nav button.active { color: var(--navy); border-bottom-color: var(--navy); }
 
+  /* ── Cycle submenu ── */
+  .cycle-subnav { display: flex; gap: 8px; margin-bottom: 16px; }
+  .pill-tab {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-sec);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .pill-tab:hover:not(:disabled) { color: var(--text-pri); border-color: var(--navy); }
+  .pill-tab.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .pill-tab:disabled { opacity: 0.4; cursor: not-allowed; }
+
   /* ── Main layout ── */
   main { padding: 28px 32px; max-width: 1200px; margin: 0 auto; }
 
@@ -345,13 +363,13 @@
   <div class="header-left">
     <h1>Itch Tracker</h1>
     <p id="last-updated">Fetching data…</p>
+    <p id="last-entry"></p>
   </div>
   <div class="header-right">
     <div class="header-links">
       <a href="APD_Summary.docx" target="_blank" rel="noopener">APD Summary</a>
       <a href="https://docs.google.com/spreadsheets/d/1ML-pD4w8UX7ZAJtpgWLPhnX72q3EXohqr2TTDyzDHHI/edit?usp=sharing" target="_blank" rel="noopener">Source Data</a>
     </div>
-    <span id="last-entry" style="font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.75);"></span>
     <span id="entry-count" style="font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.6);"></span>
     <button id="refresh-btn" onclick="loadData()">↻ Refresh</button>
   </div>
@@ -404,6 +422,7 @@
 
   <!-- ── VIEW 2: CYCLE ── -->
   <div id="view-cycle" class="view">
+    <div class="cycle-subnav" id="cycle-subnav"></div>
     <div class="callout callout-amber">
       <div id="cycle-start-banner"></div>
     </div>
@@ -489,6 +508,8 @@
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQf2X1-Ccqh9LX4flxG7_vRYmvDZBVaYhb5gEmiCdWO13zZG3Fyu-ZsgWWD2nxqJ7fWuPCT2TKYnJP0/pub?gid=1902937528&single=true&output=csv';
 let CYCLE_START = new Date('2026-06-06'); // fallback until auto-detected from logged menstrual days
 let cycleStartDetected = false;
+let cycleStarts = []; // all detected cycle start dates, ascending
+let viewingCycleOffset = 0; // 0 = current cycle, 1 = last (previous) cycle
 
 // Chart.js defaults
 Chart.defaults.font.family = "'DM Sans', sans-serif";
@@ -503,9 +524,9 @@ function parseDate(str) {
   const d = new Date(str);
   return isNaN(d) ? null : d;
 }
-function cycleDay(date) {
+function cycleDay(date, start = CYCLE_START) {
   if (!date) return null;
-  const diff = Math.floor((date - CYCLE_START) / 86400000) + 1;
+  const diff = Math.floor((date - start) / 86400000) + 1;
   return diff >= 1 ? diff : null;
 }
 function cyclePhase(day) {
@@ -515,15 +536,28 @@ function cyclePhase(day) {
   if (day <= 19) return 'ovulation';
   return 'luteal';
 }
-function detectCycleStart(data) {
+function detectCycleStarts(data) {
   const menstrualDates = data.filter(r => r.menstrual && r.date).map(r => r.date).sort((a, b) => a - b);
-  if (!menstrualDates.length) return null;
-  let runStart = menstrualDates[0];
+  if (!menstrualDates.length) return [];
+  const starts = [menstrualDates[0]];
   for (let i = 1; i < menstrualDates.length; i++) {
     const gapDays = Math.round((menstrualDates[i] - menstrualDates[i - 1]) / 86400000);
-    if (gapDays > 2) runStart = menstrualDates[i];
+    if (gapDays > 2) starts.push(menstrualDates[i]);
   }
-  return runStart;
+  return starts;
+}
+function getCycleRange(offset) {
+  if (!cycleStarts.length) return null;
+  const idx = cycleStarts.length - 1 - offset;
+  if (idx < 0) return null;
+  const start = cycleStarts[idx];
+  const nextStart = cycleStarts[idx + 1];
+  const end = nextStart ? new Date(nextStart.getTime() - 86400000) : null;
+  return { start, end, isCurrent: idx === cycleStarts.length - 1 };
+}
+function switchCycle(offset) {
+  viewingCycleOffset = offset;
+  buildCycle();
 }
 function phaseColor(phase) {
   return { menses:'#B53030', follicular:'#1A5A9A', ovulation:'#1F6E56', luteal:'#B86E0A' }[phase] || '#888';
@@ -606,10 +640,10 @@ async function loadData() {
       .filter(r => r.date)
       .sort((a,b) => a.date - b.date);
 
-    const detected = detectCycleStart(allData);
-    cycleStartDetected = !!detected;
-    if (detected) CYCLE_START = detected;
-    allData.forEach(r => { r.cycleDay = r.date >= CYCLE_START ? cycleDay(r.date) : null; });
+    cycleStarts = detectCycleStarts(allData);
+    cycleStartDetected = cycleStarts.length > 0;
+    if (cycleStartDetected) CYCLE_START = cycleStarts[cycleStarts.length - 1];
+    allData.forEach(r => { r.cycleDay = (cycleStartDetected && r.date >= CYCLE_START) ? cycleDay(r.date) : null; });
 
     document.getElementById('last-updated').textContent = 'Last fetched: ' + new Date().toLocaleTimeString();
     document.getElementById('entry-count').textContent = allData.length + ' entries';
@@ -762,33 +796,52 @@ function buildTimeline() {
 
 // ── VIEW 2: Cycle ──────────────────────────────────────
 function buildCycle() {
-  const cycData = allData.filter(r => r.cycleDay !== null);
+  const fmtLong = dt => dt.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
+  const fmtShort = dt => dt.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+
+  const hasPrevious = cycleStarts.length > 1;
+  document.getElementById('cycle-subnav').innerHTML = `
+    <button class="pill-tab ${viewingCycleOffset===0?'active':''}" onclick="switchCycle(0)">Current Cycle</button>
+    <button class="pill-tab ${viewingCycleOffset===1?'active':''}" onclick="switchCycle(1)" ${hasPrevious?'':'disabled'}>Last Cycle</button>
+  `;
+
+  const range = getCycleRange(viewingCycleOffset);
+  const banner = document.getElementById('cycle-start-banner');
+
+  if (!range) {
+    banner.innerHTML = `<strong>No cycle start detected yet.</strong> Log "Menstrual Cycle: Yes" for a few consecutive days on the sheet to let cycle-day estimates auto-calculate.`;
+    document.getElementById('strip-cycle').innerHTML = '';
+    ['insight-ovulation','insight-luteal','insight-menses'].forEach(id => document.getElementById(id).innerHTML = '');
+    destroyChart('cycle');
+    destroyChart('phase');
+    return;
+  }
+
+  const cycData = allData
+    .filter(r => r.date >= range.start && (!range.end || r.date <= range.end))
+    .map(r => ({ ...r, cycleDay: cycleDay(r.date, range.start) }));
   const phases = { menses:[], follicular:[], ovulation:[], luteal:[] };
   cycData.forEach(r => {
     const ph = cyclePhase(r.cycleDay);
     if (ph) phases[ph].push(r.itch);
   });
 
-  const fmtLong = dt => dt.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
-  const fmtShort = dt => dt.toLocaleDateString('en-US', {month:'short', day:'numeric'});
-  const banner = document.getElementById('cycle-start-banner');
-  if (cycleStartDetected) {
-    const ovulationDate = new Date(CYCLE_START.getTime() + 13*86400000);
-    const lutealDate = new Date(CYCLE_START.getTime() + 20*86400000);
-    banner.innerHTML = `<strong>Estimated cycle start: ${fmtLong(CYCLE_START)}.</strong> Auto-detected from the most recent run of logged "Menstrual Cycle: Yes" days. Cycle days are calculated from this date — ovulation estimated at day 14 (~${fmtShort(ovulationDate)}), luteal window begins ~day 21 (~${fmtShort(lutealDate)}).`;
-  } else {
-    banner.innerHTML = `<strong>No cycle start detected yet.</strong> Log "Menstrual Cycle: Yes" for a few consecutive days on the sheet to let cycle-day estimates auto-calculate.`;
-  }
+  const cycleLabel = range.isCurrent ? 'Current cycle' : 'Last cycle';
+  const rangeLabelLong = range.end ? `${fmtLong(range.start)} – ${fmtLong(range.end)}` : `${fmtLong(range.start)} – ongoing`;
+  const rangeLabelShort = range.end ? `${fmtShort(range.start)} – ${fmtShort(range.end)}` : `since ${fmtShort(range.start)}`;
+  const ovulationDate = new Date(range.start.getTime() + 13*86400000);
+  const lutealDate = new Date(range.start.getTime() + 20*86400000);
+  banner.innerHTML = `<strong>${cycleLabel}: ${rangeLabelLong}.</strong> Auto-detected from logged "Menstrual Cycle: Yes" days. Cycle days are calculated from this start — ovulation estimated at day 14 (~${fmtShort(ovulationDate)}), luteal window begins ~day 21 (~${fmtShort(lutealDate)}).`;
 
   document.getElementById('strip-cycle').innerHTML = `
-    <div class="stat"><div class="stat-label">Cycle entries</div><div class="stat-value">${cycData.length}</div><div class="stat-sub">since ${fmtShort(CYCLE_START)}</div></div>
+    <div class="stat"><div class="stat-label">Cycle entries</div><div class="stat-value">${cycData.length}</div><div class="stat-sub">${rangeLabelShort}</div></div>
     <div class="stat"><div class="stat-label">Menses avg</div><div class="stat-value" style="color:var(--red)">${avg(phases.menses)?.toFixed(1)||'—'}</div><div class="stat-sub">days 1–5</div></div>
     <div class="stat"><div class="stat-label">Follicular avg</div><div class="stat-value" style="color:var(--blue)">${avg(phases.follicular)?.toFixed(1)||'—'}</div><div class="stat-sub">days 6–13</div></div>
     <div class="stat"><div class="stat-label">Ovulation avg</div><div class="stat-value" style="color:var(--teal)">${avg(phases.ovulation)?.toFixed(1)||'—'}</div><div class="stat-sub">days 14–19</div></div>
     <div class="stat"><div class="stat-label">Luteal avg</div><div class="stat-value" style="color:var(--amber)">${avg(phases.luteal)?.toFixed(1)||'—'}</div><div class="stat-sub">days 20+</div></div>
   `;
 
-  // Phase insight callouts — recomputed from current data, not fixed prose
+  // Phase insight callouts — recomputed from the selected cycle's data, not fixed prose
   const phaseStats = {};
   ['menses','follicular','ovulation','luteal'].forEach(p => {
     const arr = phases[p];
@@ -802,18 +855,20 @@ function buildCycle() {
 
   const ovS = phaseStats.ovulation;
   document.getElementById('insight-ovulation').innerHTML = ovS.count
-    ? `<strong>Ovulation window (d14–19):</strong> avg itch ${ovS.avg.toFixed(1)} across ${ovS.count} logged day${ovS.count===1?'':'s'} (range ${ovS.min}–${ovS.max}).${lowestPhase==='ovulation' ? ' Currently the lowest itch period in the dataset.' : ''}`
+    ? `<strong>Ovulation window (d14–19):</strong> avg itch ${ovS.avg.toFixed(1)} across ${ovS.count} logged day${ovS.count===1?'':'s'} (range ${ovS.min}–${ovS.max}).${lowestPhase==='ovulation' ? ' Currently the lowest itch period in this cycle.' : ''}`
     : `<strong>Ovulation window (d14–19):</strong> no logged days yet in this window.`;
 
   const lutS = phaseStats.luteal;
   document.getElementById('insight-luteal').innerHTML = lutS.count
-    ? `<strong>Luteal phase (d20+):</strong> avg itch ${lutS.avg.toFixed(1)} across ${lutS.count} logged day${lutS.count===1?'':'s'} (range ${lutS.min}–${lutS.max}).${highestPhase==='luteal' ? ' Currently the highest itch period in the dataset, consistent with the premenstrual pattern described in APD literature.' : ''}`
+    ? `<strong>Luteal phase (d20+):</strong> avg itch ${lutS.avg.toFixed(1)} across ${lutS.count} logged day${lutS.count===1?'':'s'} (range ${lutS.min}–${lutS.max}).${highestPhase==='luteal' ? ' Currently the highest itch period in this cycle, consistent with the premenstrual pattern described in APD literature.' : ''}`
     : `<strong>Luteal phase (d20+):</strong> no logged days yet in this window.`;
 
   const menS = phaseStats.menses;
   document.getElementById('insight-menses').innerHTML = menS.count
-    ? `<strong>Menses (d1–5):</strong> avg itch ${menS.avg.toFixed(1)} across ${menS.count} logged day${menS.count===1?'':'s'} (range ${menS.min}–${menS.max}).${highestPhase==='menses' ? ' Currently the highest itch period in the dataset.' : ''}`
+    ? `<strong>Menses (d1–5):</strong> avg itch ${menS.avg.toFixed(1)} across ${menS.count} logged day${menS.count===1?'':'s'} (range ${menS.min}–${menS.max}).${highestPhase==='menses' ? ' Currently the highest itch period in this cycle.' : ''}`
     : `<strong>Menses (d1–5):</strong> no logged days yet in this window.`;
+
+  const maxDay = Math.max(32, ...cycData.map(r=>r.cycleDay));
 
   destroyChart('cycle');
   const ctx1 = document.getElementById('chart-cycle').getContext('2d');
@@ -836,7 +891,7 @@ function buildCycle() {
         }}}
       },
       scales: {
-        x: { type:'linear', min:0, max:32,
+        x: { type:'linear', min:0, max:maxDay,
           title:{display:true,text:'Estimated cycle day',color:'#A09C97',font:{size:10}},
           ticks:{ ...tickOpts(), stepSize:2 }, grid:gridOpts(),
           // Phase background via annotation-like approach using afterDraw
@@ -852,7 +907,7 @@ function buildCycle() {
           {from:1,to:5,  color:'rgba(181,48,48,0.07)'},
           {from:5,to:13, color:'rgba(26,90,154,0.07)'},
           {from:13,to:20,color:'rgba(31,110,86,0.07)'},
-          {from:20,to:32,color:'rgba(184,110,10,0.07)'},
+          {from:20,to:maxDay,color:'rgba(184,110,10,0.07)'},
         ];
         bands.forEach(b=>{
           const left = x.getPixelForValue(b.from);
