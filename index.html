@@ -390,14 +390,13 @@
     <div class="card">
       <div class="card-title">
         Itch level over time
-        <span style="font-size:11px;color:var(--text-ter);">Blue dots = alcohol day</span>
       </div>
       <div class="chart-container"><canvas id="chart-timeline"></canvas></div>
       <div class="legend" style="margin-top:12px;">
         <div class="legend-item"><div class="legend-dot" style="background:#B53030;"></div> Severe (7–10)</div>
         <div class="legend-item"><div class="legend-dot" style="background:#B86E0A;"></div> Moderate (4–6)</div>
         <div class="legend-item"><div class="legend-dot" style="background:#1F6E56;"></div> Low (0–3)</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#1A5A9A;"></div> Alcohol day</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#7C3AED;"></div> Alcohol day</div>
       </div>
     </div>
     <div class="two-col">
@@ -727,7 +726,7 @@ function buildTimeline() {
         data: d.map(r=>r.itch),
         borderColor: '#1F6E56',
         backgroundColor: 'rgba(31,110,86,0.07)',
-        pointBackgroundColor: d.map(r => r.alcohol ? '#1A5A9A' : itchColor(r.itch)),
+        pointBackgroundColor: d.map(r => r.alcohol ? '#7C3AED' : itchColor(r.itch)),
         pointRadius: 5,
         pointHoverRadius: 7,
         fill: true,
