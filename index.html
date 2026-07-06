@@ -1087,13 +1087,12 @@ function buildDiet() {
   tbody.innerHTML = sorted.map(r => {
     const iv = Math.round(r.itch);
     const bg = iv>=7?'#B53030': iv>=4?'#B86E0A':'#1F6E56';
-    const food = r.food.length > 80 ? r.food.substring(0,80)+'…' : r.food;
     return `<tr>
       <td style="font-family:var(--mono);white-space:nowrap;">${r.date.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</td>
       <td><span class="itch-pill" style="background:${bg}20;color:${bg}">${iv}</span></td>
       <td style="color:${r.alcohol?'var(--red)':'var(--text-ter)'}">${r.alcohol?'Yes':'No'}</td>
       <td style="color:${r.vanicream?'var(--teal)':'var(--text-ter)'}">${r.vanicream?'Yes':'No'}</td>
-      <td style="color:var(--text-sec);font-size:12px;">${food||'—'}</td>
+      <td style="color:var(--text-sec);font-size:12px;white-space:normal;min-width:260px;">${r.food||'—'}</td>
     </tr>`;
   }).join('');
 }
