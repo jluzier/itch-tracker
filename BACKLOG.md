@@ -36,10 +36,13 @@ Fields already captured per entry but never surfaced in any chart or callout:
 
 ## Data Quality / Robustness
 
-- [ ] Manual cycle-start override — `detectCycleStarts()` silently breaks on a
-      mislogged or missed menstrual-flag day; needs a manual correction path.
-- [ ] Logging-gap awareness — flag missed days so silent gaps don't skew averages
-      without being noticed.
+- [x] Manual cycle-start override — added an "Edit cycle starts" panel on the Cycle
+      Mapping tab to exclude a bad auto-detected date or add a missed one, stored as a
+      diff in localStorage on top of `detectCycleStarts()` (always resettable).
+      Closed as [#2](https://github.com/jluzier/itch-tracker/issues/2).
+- [x] Logging-gap awareness — Timeline tab now shows a current-streak stat, a
+      logging-gaps stat, and a callout listing the largest gaps by date range.
+      Closed as [#3](https://github.com/jluzier/itch-tracker/issues/3).
 
 ## UX
 

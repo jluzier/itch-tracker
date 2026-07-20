@@ -148,6 +148,48 @@
   .pill-tab:hover:not(:disabled) { color: var(--text-pri); border-color: var(--navy); }
   .pill-tab.active { background: var(--navy); border-color: var(--navy); color: #fff; }
   .pill-tab:disabled { opacity: 0.4; cursor: not-allowed; }
+  .pill-tab.pill-tab-ghost { margin-left: auto; }
+
+  /* ── Cycle start editor ── */
+  .cycle-editor-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .cycle-editor-row:last-child { border-bottom: none; }
+  .cycle-editor-row .ce-date { flex: 1; color: var(--text-pri); }
+  .cycle-editor-row .ce-tag {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.05em; padding: 2px 7px; border-radius: 4px;
+  }
+  .ce-tag-auto   { background: var(--blue-lt);  color: var(--blue); }
+  .ce-tag-manual { background: var(--teal-lt);  color: var(--teal); }
+  .cycle-editor-row button {
+    font-family: var(--sans); font-size: 12px; color: var(--text-ter);
+    background: none; border: 1px solid var(--border); border-radius: 5px;
+    padding: 2px 9px; cursor: pointer;
+  }
+  .cycle-editor-row button:hover { color: var(--red); border-color: var(--red); }
+  .cycle-editor-restore button:hover { color: var(--teal); border-color: var(--teal); }
+  .cycle-editor-add { display: flex; gap: 8px; margin-top: 14px; }
+  .cycle-editor-add input {
+    font-family: var(--mono); font-size: 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 7px 10px; color: var(--text-pri);
+  }
+  .cycle-editor-add button {
+    font-family: var(--sans); font-size: 12px; font-weight: 500;
+    background: var(--navy); color: #fff; border: none;
+    border-radius: 6px; padding: 7px 14px; cursor: pointer;
+  }
+  .cycle-editor-add button:hover { opacity: 0.9; }
+  .cycle-editor-reset {
+    display: block; margin-top: 14px;
+    font-family: var(--sans); font-size: 11px; color: var(--text-ter);
+    background: none; border: none; text-decoration: underline; cursor: pointer;
+  }
+  .cycle-editor-excluded { margin-top: 12px; }
 
   /* ── Main layout ── */
   main { padding: 28px 32px; max-width: 1200px; margin: 0 auto; }
@@ -417,11 +459,18 @@
         <div id="insight-vanicream"></div>
       </div>
     </div>
+    <div class="callout callout-amber">
+      <div id="insight-gaps"></div>
+    </div>
   </div>
 
   <!-- ── VIEW 2: CYCLE ── -->
   <div id="view-cycle" class="view">
     <div class="cycle-subnav" id="cycle-subnav"></div>
+    <div class="card" id="cycle-editor-card" style="display:none;">
+      <div class="card-title">Cycle start overrides</div>
+      <div id="cycle-editor-body"></div>
+    </div>
     <div class="callout callout-amber">
       <div id="cycle-start-banner"></div>
     </div>
@@ -526,6 +575,8 @@ function parseDate(str) {
   const d = new Date(str);
   return isNaN(d) ? null : d;
 }
+function fmtLong(dt) { return dt.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}); }
+function fmtShort(dt) { return dt.toLocaleDateString('en-US', {month:'short', day:'numeric'}); }
 function cycleDay(date, start = CYCLE_START) {
   if (!date) return null;
   const diff = Math.floor((date - start) / 86400000) + 1;
@@ -548,6 +599,156 @@ function detectCycleStarts(data) {
   }
   return starts;
 }
+
+// ── Cycle start overrides ──────────────────────────────
+// Auto-detection has no correction path when a menstrual day is mislogged
+// or missed. Overrides are stored as a diff against the auto-detected list
+// (excluded auto dates + manually-added dates), not a replacement of it, so
+// "reset to auto-detected" is always available and lossless.
+const CYCLE_OVERRIDES_KEY = 'itchTrackerCycleOverrides';
+let cycleEditorOpen = false;
+
+function toISODate(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function localDateFromISO(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function loadCycleOverrides() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CYCLE_OVERRIDES_KEY));
+    return { manualAdds: parsed?.manualAdds || [], removedAuto: parsed?.removedAuto || [] };
+  } catch (e) {
+    return { manualAdds: [], removedAuto: [] };
+  }
+}
+function saveCycleOverrides(overrides) {
+  localStorage.setItem(CYCLE_OVERRIDES_KEY, JSON.stringify(overrides));
+}
+function computeCycleStarts(data) {
+  const auto = detectCycleStarts(data);
+  const overrides = loadCycleOverrides();
+  const removedSet = new Set(overrides.removedAuto);
+  const kept = auto.filter(d => !removedSet.has(toISODate(d)));
+  const manual = overrides.manualAdds.map(localDateFromISO);
+  const seen = new Set();
+  const merged = [];
+  [...kept, ...manual].sort((a, b) => a - b).forEach(d => {
+    const key = toISODate(d);
+    if (!seen.has(key)) { seen.add(key); merged.push(d); }
+  });
+  return merged;
+}
+function refreshCycleStarts() {
+  cycleStarts = computeCycleStarts(allData);
+  cycleStartDetected = cycleStarts.length > 0;
+  if (cycleStartDetected) CYCLE_START = cycleStarts[cycleStarts.length - 1];
+  viewingCycleOffset = 0;
+  buildCycle();
+}
+function toggleCycleEditor() {
+  cycleEditorOpen = !cycleEditorOpen;
+  buildCycle();
+}
+function addManualCycleStart() {
+  const input = document.getElementById('cycle-editor-date-input');
+  if (!input.value) return;
+  const overrides = loadCycleOverrides();
+  if (!overrides.manualAdds.includes(input.value)) overrides.manualAdds.push(input.value);
+  saveCycleOverrides(overrides);
+  refreshCycleStarts();
+}
+function removeCycleStart(iso, source) {
+  const overrides = loadCycleOverrides();
+  if (source === 'manual') {
+    overrides.manualAdds = overrides.manualAdds.filter(s => s !== iso);
+  } else if (!overrides.removedAuto.includes(iso)) {
+    overrides.removedAuto.push(iso);
+  }
+  saveCycleOverrides(overrides);
+  refreshCycleStarts();
+}
+function restoreCycleStart(iso) {
+  const overrides = loadCycleOverrides();
+  overrides.removedAuto = overrides.removedAuto.filter(s => s !== iso);
+  saveCycleOverrides(overrides);
+  refreshCycleStarts();
+}
+function resetCycleOverrides() {
+  localStorage.removeItem(CYCLE_OVERRIDES_KEY);
+  refreshCycleStarts();
+}
+function renderCycleEditor() {
+  const body = document.getElementById('cycle-editor-body');
+  const card = document.getElementById('cycle-editor-card');
+  if (!body || !card) return;
+  card.style.display = cycleEditorOpen ? 'block' : 'none';
+  if (!cycleEditorOpen) return;
+
+  const overrides = loadCycleOverrides();
+  const manualSet = new Set(overrides.manualAdds);
+  const autoDetected = detectCycleStarts(allData);
+  const excludedAuto = autoDetected.filter(d => overrides.removedAuto.includes(toISODate(d)));
+
+  const rows = cycleStarts.map(d => {
+    const iso = toISODate(d);
+    const source = manualSet.has(iso) ? 'manual' : 'auto';
+    return `<div class="cycle-editor-row">
+      <span class="ce-date">${fmtLong(d)}</span>
+      <span class="ce-tag ce-tag-${source}">${source}</span>
+      <button onclick="removeCycleStart('${iso}','${source}')" title="Remove this cycle start">×</button>
+    </div>`;
+  }).join('') || `<div class="stat-sub">No cycle starts yet.</div>`;
+
+  const excludedHtml = excludedAuto.length ? `
+    <div class="cycle-editor-excluded">
+      <div class="stat-sub">Excluded auto-detected dates</div>
+      ${excludedAuto.map(d => `<div class="cycle-editor-row cycle-editor-restore">
+        <span class="ce-date">${fmtLong(d)}</span>
+        <button onclick="restoreCycleStart('${toISODate(d)}')">restore</button>
+      </div>`).join('')}
+    </div>` : '';
+
+  const hasOverrides = overrides.manualAdds.length || overrides.removedAuto.length;
+
+  body.innerHTML = `
+    ${rows}
+    ${excludedHtml}
+    <div class="cycle-editor-add">
+      <input type="date" id="cycle-editor-date-input">
+      <button onclick="addManualCycleStart()">Add cycle start</button>
+    </div>
+    ${hasOverrides ? `<button class="cycle-editor-reset" onclick="resetCycleOverrides()">Reset to auto-detected</button>` : ''}
+  `;
+}
+
+// ── Logging gap awareness ──────────────────────────────
+function detectLoggingGaps(data) {
+  const gaps = [];
+  for (let i = 1; i < data.length; i++) {
+    const diffDays = Math.round((data[i].date - data[i - 1].date) / 86400000);
+    if (diffDays > 1) {
+      gaps.push({
+        start: new Date(data[i - 1].date.getTime() + 86400000),
+        end: new Date(data[i].date.getTime() - 86400000),
+        missingDays: diffDays - 1,
+      });
+    }
+  }
+  return gaps;
+}
+function computeCurrentStreak(data) {
+  if (!data.length) return 0;
+  let streak = 1;
+  for (let i = data.length - 1; i > 0; i--) {
+    if (Math.round((data[i].date - data[i - 1].date) / 86400000) === 1) streak++;
+    else break;
+  }
+  return streak;
+}
+
 function getCycleRange(offset) {
   if (!cycleStarts.length) return null;
   const idx = cycleStarts.length - 1 - offset;
@@ -642,10 +843,9 @@ async function loadData() {
       .filter(r => r.date)
       .sort((a,b) => a.date - b.date);
 
-    cycleStarts = detectCycleStarts(allData);
+    cycleStarts = computeCycleStarts(allData);
     cycleStartDetected = cycleStarts.length > 0;
     if (cycleStartDetected) CYCLE_START = cycleStarts[cycleStarts.length - 1];
-    allData.forEach(r => { r.cycleDay = (cycleStartDetected && r.date >= CYCLE_START) ? cycleDay(r.date) : null; });
 
     document.getElementById('last-updated').textContent = 'Last fetched: ' + new Date().toLocaleTimeString();
     document.getElementById('entry-count').textContent = allData.length + ' entries';
@@ -680,6 +880,9 @@ function buildTimeline() {
   const severe = d.filter(r=>r.itch>=7).length;
   const low = d.filter(r=>r.itch<=2).length;
   const alcoholDays = d.filter(r=>r.alcohol).length;
+  const gaps = detectLoggingGaps(d);
+  const totalMissingDays = gaps.reduce((sum,g)=>sum+g.missingDays,0);
+  const streak = computeCurrentStreak(d);
 
   document.getElementById('strip-timeline').innerHTML = `
     <div class="stat"><div class="stat-label">Entries</div><div class="stat-value">${d.length}</div><div class="stat-sub">days logged</div></div>
@@ -687,6 +890,8 @@ function buildTimeline() {
     <div class="stat"><div class="stat-label">Severe days</div><div class="stat-value" style="color:var(--red)">${severe}</div><div class="stat-sub">itch ≥ 7 (${Math.round(severe/d.length*100)}%)</div></div>
     <div class="stat"><div class="stat-label">Low days</div><div class="stat-value" style="color:var(--teal)">${low}</div><div class="stat-sub">itch ≤ 2 (${Math.round(low/d.length*100)}%)</div></div>
     <div class="stat"><div class="stat-label">Alcohol days</div><div class="stat-value">${alcoholDays}</div><div class="stat-sub">of ${d.length} entries</div></div>
+    <div class="stat"><div class="stat-label">Current streak</div><div class="stat-value">${streak}</div><div class="stat-sub">consecutive day${streak===1?'':'s'} logged</div></div>
+    <div class="stat"><div class="stat-label">Logging gaps</div><div class="stat-value" style="color:${gaps.length?'var(--amber)':'var(--teal)'}">${gaps.length}</div><div class="stat-sub">${totalMissingDays} missed day${totalMissingDays===1?'':'s'} total</div></div>
   `;
 
   // Alcohol / Vanicream insight callouts
@@ -713,6 +918,15 @@ function buildTimeline() {
     vcEl.innerHTML = `<strong>Vanicream</strong> Days using Vanicream shampoo/conditioner average ${vcOnAvg.toFixed(1)} itch vs ${vcOffAvg.toFixed(1)} on other days — ${Math.abs(vcOnAvg-vcOffAvg).toFixed(1)} points ${direction}.`;
   } else {
     vcEl.innerHTML = `<strong>Vanicream</strong> Not enough data yet to compare Vanicream vs other products.`;
+  }
+
+  const gapsEl = document.getElementById('insight-gaps');
+  if (!gaps.length) {
+    gapsEl.innerHTML = `<strong>Logging gaps</strong> No gaps — every day in range has a log entry. Current streak: ${streak} day${streak===1?'':'s'}.`;
+  } else {
+    const topGaps = [...gaps].sort((a,b)=>b.missingDays-a.missingDays).slice(0,3)
+      .map(g => `${fmtShort(g.start)}${g.missingDays>1?`–${fmtShort(g.end)}`:''} (${g.missingDays}d)`).join(', ');
+    gapsEl.innerHTML = `<strong>Logging gaps</strong> ${gaps.length} gap${gaps.length===1?'':'s'} totaling ${totalMissingDays} missing day${totalMissingDays===1?'':'s'}. Largest: ${topGaps}. A gap around a period could also throw off cycle-start detection — check the Cycle Mapping tab if phases look off.`;
   }
 
   // Timeline chart
@@ -798,20 +1012,19 @@ function buildTimeline() {
 
 // ── VIEW 2: Cycle ──────────────────────────────────────
 function buildCycle() {
-  const fmtLong = dt => dt.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
-  const fmtShort = dt => dt.toLocaleDateString('en-US', {month:'short', day:'numeric'});
-
   const hasPrevious = cycleStarts.length > 1;
   document.getElementById('cycle-subnav').innerHTML = `
     <button class="pill-tab ${viewingCycleOffset===0?'active':''}" onclick="switchCycle(0)">Current Cycle</button>
     <button class="pill-tab ${viewingCycleOffset===1?'active':''}" onclick="switchCycle(1)" ${hasPrevious?'':'disabled'}>Last Cycle</button>
+    <button class="pill-tab pill-tab-ghost ${cycleEditorOpen?'active':''}" onclick="toggleCycleEditor()">⚙ Edit cycle starts</button>
   `;
+  renderCycleEditor();
 
   const range = getCycleRange(viewingCycleOffset);
   const banner = document.getElementById('cycle-start-banner');
 
   if (!range) {
-    banner.innerHTML = `<strong>No cycle start detected yet.</strong> Log "Menstrual Cycle: Yes" for a few consecutive days on the sheet to let cycle-day estimates auto-calculate.`;
+    banner.innerHTML = `<strong>No cycle start detected yet.</strong> Log "Menstrual Cycle: Yes" for a few consecutive days on the sheet to let cycle-day estimates auto-calculate, or add one manually via "Edit cycle starts" above.`;
     document.getElementById('strip-cycle').innerHTML = '';
     ['insight-menses','insight-follicular','insight-ovulation','insight-luteal'].forEach(id => document.getElementById(id).innerHTML = '');
     destroyChart('cycle');
