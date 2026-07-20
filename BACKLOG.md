@@ -46,8 +46,9 @@ Fields already captured per entry but never surfaced in any chart or callout:
 
 ## UX
 
-- [ ] Date range filter on the Timeline chart and the Diet log table — the log table
-      currently renders every row ever logged and will get unwieldy as data grows.
+- [x] Date range filter on the Timeline chart and the Diet log table — added
+      7d/30d/90d/All-time pill filters to each independently (Timeline's streak/gap
+      stats stay computed over full history regardless of the selected window).
 - [ ] Colorblind-safe severity encoding — severity is currently color-only
       (red/amber/teal); add a text or shape fallback.
 - [ ] Dark mode.

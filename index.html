@@ -133,6 +133,8 @@
 
   /* ── Cycle submenu ── */
   .cycle-subnav { display: flex; gap: 8px; margin-bottom: 16px; }
+  .range-filter { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+  .range-filter .range-note { font-size: 11px; color: var(--text-ter); font-family: var(--mono); margin-left: 4px; }
   .pill-tab {
     font-family: var(--sans);
     font-size: 12px;
@@ -428,6 +430,7 @@
 
   <!-- ── VIEW 1: TIMELINE ── -->
   <div id="view-timeline" class="view active">
+    <div class="range-filter" id="timeline-range-filter"></div>
     <div class="stat-strip" id="strip-timeline"></div>
     <div class="card">
       <div class="card-title">
@@ -537,6 +540,7 @@
     </div>
     <div class="card">
       <div class="card-title">Daily log — food & itch <span style="font-size:11px;color:var(--text-ter);">most recent first</span></div>
+      <div class="range-filter" id="diet-log-range-filter"></div>
       <div style="overflow-x:auto;">
         <table class="diet-table" id="diet-log-table">
           <thead>
@@ -749,6 +753,29 @@ function computeCurrentStreak(data) {
   return streak;
 }
 
+// ── Date range filter ──────────────────────────────────
+// Anchored to the most recent logged entry, not calendar-today, so
+// "last 30 days" still shows data if a day or two hasn't been logged yet.
+const RANGE_OPTIONS = [{label:'7d', val:7}, {label:'30d', val:30}, {label:'90d', val:90}, {label:'All time', val:'all'}];
+let timelineRangeDays = 'all';
+let dietLogRangeDays = 'all';
+
+function filterByRange(data, rangeDays) {
+  if (rangeDays === 'all' || !data.length) return data;
+  const cutoff = new Date(data[data.length - 1].date.getTime() - (rangeDays - 1) * 86400000);
+  return data.filter(r => r.date >= cutoff);
+}
+function renderRangeFilter(elId, current, setterName) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = RANGE_OPTIONS.map(o => {
+    const arg = typeof o.val === 'number' ? o.val : `'${o.val}'`;
+    return `<button class="pill-tab ${current===o.val?'active':''}" onclick="${setterName}(${arg})">${o.label}</button>`;
+  }).join('');
+}
+function setTimelineRange(v) { timelineRangeDays = v; buildTimeline(); }
+function setDietLogRange(v) { dietLogRangeDays = v; buildDiet(); }
+
 function getCycleRange(offset) {
   if (!cycleStarts.length) return null;
   const idx = cycleStarts.length - 1 - offset;
@@ -875,17 +902,22 @@ function buildAll() {
 
 // ── VIEW 1: Timeline ───────────────────────────────────
 function buildTimeline() {
-  const d = allData;
+  renderRangeFilter('timeline-range-filter', timelineRangeDays, 'setTimelineRange');
+
+  const full = allData;
+  const d = filterByRange(full, timelineRangeDays);
   const avgItch = avg(d.map(r=>r.itch));
   const severe = d.filter(r=>r.itch>=7).length;
   const low = d.filter(r=>r.itch<=2).length;
   const alcoholDays = d.filter(r=>r.alcohol).length;
-  const gaps = detectLoggingGaps(d);
+  // Streak/gaps reflect overall logging behavior, not just the visible chart window.
+  const gaps = detectLoggingGaps(full);
   const totalMissingDays = gaps.reduce((sum,g)=>sum+g.missingDays,0);
-  const streak = computeCurrentStreak(d);
+  const streak = computeCurrentStreak(full);
+  const entriesSub = timelineRangeDays === 'all' ? 'days logged' : `of ${full.length} total`;
 
   document.getElementById('strip-timeline').innerHTML = `
-    <div class="stat"><div class="stat-label">Entries</div><div class="stat-value">${d.length}</div><div class="stat-sub">days logged</div></div>
+    <div class="stat"><div class="stat-label">Entries</div><div class="stat-value">${d.length}</div><div class="stat-sub">${entriesSub}</div></div>
     <div class="stat"><div class="stat-label">Avg itch</div><div class="stat-value" style="color:${itchColor(avgItch)}">${avgItch.toFixed(1)}</div><div class="stat-sub">out of 10</div></div>
     <div class="stat"><div class="stat-label">Severe days</div><div class="stat-value" style="color:var(--red)">${severe}</div><div class="stat-sub">itch ≥ 7 (${Math.round(severe/d.length*100)}%)</div></div>
     <div class="stat"><div class="stat-label">Low days</div><div class="stat-value" style="color:var(--teal)">${low}</div><div class="stat-sub">itch ≤ 2 (${Math.round(low/d.length*100)}%)</div></div>
@@ -1295,8 +1327,9 @@ function buildDiet() {
   `).join('') : `<div class="stat-sub">No high-histamine keyword matches found in the food log.</div>`;
 
   // Diet log table — most recent first
+  renderRangeFilter('diet-log-range-filter', dietLogRangeDays, 'setDietLogRange');
   const tbody = document.getElementById('diet-log-body');
-  const sorted = [...d].reverse();
+  const sorted = [...filterByRange(d, dietLogRangeDays)].reverse();
   tbody.innerHTML = sorted.map(r => {
     const iv = Math.round(r.itch);
     const bg = iv>=7?'#B53030': iv>=4?'#B86E0A':'#1F6E56';
