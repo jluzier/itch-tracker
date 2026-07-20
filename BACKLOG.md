@@ -7,11 +7,10 @@ than opening issues for the whole backlog up front.
 
 ## Privacy / Security
 
-- [ ] Stop exposing the live data feed in a public repo — the Google Sheet's
-      published CSV URL is hardcoded in `index.html` and readable by anyone who views
-      this public repo's source, no GitHub auth required. Either make the repo private,
-      or unpublish/rescope the sheet and move the URL out of source.
-      Tracked in [#1](https://github.com/jluzier/itch-tracker/issues/1).
+- [x] ~~Stop exposing the live data feed in a public repo~~ — **won't fix.** Reviewed
+      and declined: the sheet has no identifiable information, so the exposure isn't a
+      meaningful risk, and the tradeoff (pasting a CSV URL on every use) wasn't worth
+      it. Closed as [#1](https://github.com/jluzier/itch-tracker/issues/1).
 
 ## Data & Insights
 
@@ -41,8 +40,6 @@ Fields already captured per entry but never surfaced in any chart or callout:
       mislogged or missed menstrual-flag day; needs a manual correction path.
 - [ ] Logging-gap awareness — flag missed days so silent gaps don't skew averages
       without being noticed.
-- [ ] Move the sheet URL out of hardcoded source (ties into the privacy item above;
-      also makes the app less brittle if the sheet ever changes).
 
 ## UX
 
