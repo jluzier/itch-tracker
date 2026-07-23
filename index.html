@@ -243,6 +243,15 @@
     gap: 12px;
     margin-bottom: 24px;
   }
+  .header-stat-strip {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 200px));
+    max-width: 1200px;
+    margin: 16px auto 0;
+    padding: 0 32px;
+  }
+  @media (max-width: 768px) {
+    .header-stat-strip { padding: 0 16px; }
+  }
   .stat {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -445,7 +454,6 @@
   <div class="header-left">
     <h1>Itch Tracker</h1>
     <p id="last-updated">Fetching data…</p>
-    <p id="last-entry"></p>
   </div>
   <div class="header-right">
     <div class="header-links">
@@ -458,6 +466,8 @@
     <button id="refresh-btn" onclick="loadData()">↻ Refresh</button>
   </div>
 </header>
+
+<div class="stat-strip header-stat-strip" id="strip-header"></div>
 
 <nav>
   <button class="active" onclick="switchView('timeline')">Itch Timeline</button>
@@ -807,6 +817,21 @@ function computeCurrentStreak(data) {
   return streak;
 }
 
+// Cross-tab glance stats — always computed over full history, rendered
+// once per data load into the header strip (visible regardless of active tab).
+function renderHeaderStats() {
+  const streak = computeCurrentStreak(allData);
+  const gaps = detectLoggingGaps(allData);
+  const totalMissingDays = gaps.reduce((sum,g)=>sum+g.missingDays,0);
+  const lastEntry = allData[allData.length - 1];
+
+  document.getElementById('strip-header').innerHTML = `
+    <div class="stat"><div class="stat-label">Current streak</div><div class="stat-value">${streak}</div><div class="stat-sub">consecutive day${streak===1?'':'s'} logged</div></div>
+    <div class="stat"><div class="stat-label">Logging gaps</div><div class="stat-value" style="color:${gaps.length?'var(--amber)':'var(--teal)'}">${gaps.length}</div><div class="stat-sub">${totalMissingDays} missed day${totalMissingDays===1?'':'s'} total</div></div>
+    <div class="stat"><div class="stat-label">Last log</div><div class="stat-value" style="color:${lastEntry?itchColor(lastEntry.itch):'inherit'}">${lastEntry?lastEntry.itch:'—'}</div><div class="stat-sub">${lastEntry?fmtShort(lastEntry.date):'no entries yet'}</div></div>
+  `;
+}
+
 // ── Date range filter ──────────────────────────────────
 // Anchored to the most recent logged entry, not calendar-today, so
 // "last 30 days" still shows data if a day or two hasn't been logged yet.
@@ -946,12 +971,7 @@ async function loadData() {
     document.getElementById('last-updated').textContent = 'Last fetched: ' + new Date().toLocaleTimeString();
     document.getElementById('entry-count').textContent = allData.length + ' entries';
 
-    const lastEntry = allData[allData.length - 1];
-    const lastEntryEl = document.getElementById('last-entry');
-    lastEntryEl.innerHTML = lastEntry
-      ? `Last log: ${lastEntry.date.toLocaleDateString('en-US',{month:'short',day:'numeric'})} · itch <strong style="color:${itchColor(lastEntry.itch)}">${lastEntry.itch}</strong>`
-      : '';
-
+    renderHeaderStats();
     buildAll();
   } catch(e) {
     const banner = document.getElementById('error-banner');
@@ -991,8 +1011,6 @@ function buildTimeline() {
     <div class="stat"><div class="stat-label">Severe days</div><div class="stat-value" style="color:var(--red)">${severe}</div><div class="stat-sub">itch ≥ 7 (${Math.round(severe/d.length*100)}%)</div></div>
     <div class="stat"><div class="stat-label">Low days</div><div class="stat-value" style="color:var(--teal)">${low}</div><div class="stat-sub">itch ≤ 2 (${Math.round(low/d.length*100)}%)</div></div>
     <div class="stat"><div class="stat-label">Alcohol days</div><div class="stat-value">${alcoholDays}</div><div class="stat-sub">of ${d.length} entries</div></div>
-    <div class="stat"><div class="stat-label">Current streak</div><div class="stat-value">${streak}</div><div class="stat-sub">consecutive day${streak===1?'':'s'} logged</div></div>
-    <div class="stat"><div class="stat-label">Logging gaps</div><div class="stat-value" style="color:${gaps.length?'var(--amber)':'var(--teal)'}">${gaps.length}</div><div class="stat-sub">${totalMissingDays} missed day${totalMissingDays===1?'':'s'} total</div></div>
   `;
 
   // Alcohol / Vanicream insight callouts
