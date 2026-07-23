@@ -83,12 +83,6 @@
     color: #fff;
     letter-spacing: -0.3px;
   }
-  .header-left p {
-    font-size: 12px;
-    color: rgba(255,255,255,0.65);
-    margin-top: 2px;
-    font-family: var(--mono);
-  }
   .header-links {
     display: flex;
     align-items: center;
@@ -243,31 +237,30 @@
     gap: 12px;
     margin-bottom: 24px;
   }
-  /* ── Header chip row ── */
+  /* ── Header chip row ──
+     Lives inside the navy header, which doesn't invert between themes, so
+     these use the header's own fixed white-on-navy palette (like
+     .header-left p / .header-links a) rather than the surface-oriented
+     --text-pri/--text-sec/--surface tokens used elsewhere in the app. */
   .header-chip-row {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 10px 32px;
+    margin-top: 8px;
   }
   .header-chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: var(--surface);
-    border: 1px solid var(--border);
+    background: rgba(0,0,0,0.32);
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 999px;
     padding: 5px 11px 5px 9px;
     font-size: 12px;
-    color: var(--text-sec);
+    color: rgba(255,255,255,0.7);
   }
   .header-chip .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-  .header-chip b { color: var(--text-pri); font-weight: 600; }
-  @media (max-width: 768px) {
-    .header-chip-row { padding: 8px 16px; }
-  }
+  .header-chip b { color: #fff; font-weight: 600; }
   .stat {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -469,7 +462,7 @@
 <header>
   <div class="header-left">
     <h1>Itch Tracker</h1>
-    <p id="last-updated">Fetching data…</p>
+    <div class="header-chip-row" id="strip-header"></div>
   </div>
   <div class="header-right">
     <div class="header-links">
@@ -478,12 +471,11 @@
       <a href="https://docs.google.com/spreadsheets/d/1ML-pD4w8UX7ZAJtpgWLPhnX72q3EXohqr2TTDyzDHHI/edit?usp=sharing" target="_blank" rel="noopener">Source Data</a>
     </div>
     <span id="entry-count" style="font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.6);"></span>
+    <p id="last-updated">Fetching data…</p>
     <button id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle dark mode"></button>
     <button id="refresh-btn" onclick="loadData()">↻ Refresh</button>
   </div>
 </header>
-
-<div class="header-chip-row" id="strip-header"></div>
 
 <nav>
   <button class="active" onclick="switchView('timeline')">Itch Timeline</button>
