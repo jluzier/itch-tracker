@@ -22,8 +22,10 @@ Fields already captured per entry but never surfaced in any chart or callout:
 - [ ] Lagged-effect view — all current comparisons (alcohol, Vanicream, histamine foods)
       are same-day only. Add a "next-day itch" comparison alongside same-day, since
       flares from food/alcohol/hormones often show up 12–48h later.
-- [ ] Show sample size (n) and spread on insight callouts, not just an average — with
-      small samples, "6.2 vs 3.1" can read as a stronger signal than it is.
+- [x] Show sample size (n) and spread on insight callouts, not just an average — with
+      small samples, "6.2 vs 3.1" can read as a stronger signal than it is. Added
+      `n=` and min–max range to the alcohol, Vanicream, and histamine callouts, plus a
+      "small sample" caution note (n<5) across those and the four cycle-phase callouts.
 - [ ] Multi-factor combinations — e.g. alcohol-during-luteal vs alcohol-during-follicular.
       Factors are currently only ever evaluated in isolation.
 

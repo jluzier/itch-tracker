@@ -310,6 +310,7 @@
   .callout-red   { background: var(--red-lt);   border-left: 3px solid var(--red); }
   .callout-blue  { background: var(--blue-lt);  border-left: 3px solid var(--blue); }
   .callout strong { display: block; margin-bottom: 2px; }
+  .small-sample-note { display: block; margin-top: 4px; font-size: 11px; font-style: italic; opacity: 0.75; }
 
   /* ── Phase badge ── */
   .phase-badge {
@@ -800,6 +801,21 @@ function itchColor(v) {
 function avg(arr) {
   return arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length) : null;
 }
+function range(arr) {
+  return arr.length ? { min: Math.min(...arr), max: Math.max(...arr) } : null;
+}
+// "avg X.X (n=N, range A-B)" — the shared shape for every insight callout that compares groups.
+function statsFmt(arr) {
+  const a = avg(arr);
+  if (a === null) return '—';
+  const r = range(arr);
+  return `${a.toFixed(1)} (n=${arr.length}, range ${r.min}–${r.max})`;
+}
+const SMALL_SAMPLE_N = 5;
+function smallSampleNote(...arrs) {
+  const small = arrs.some(a => a.length > 0 && a.length < SMALL_SAMPLE_N);
+  return small ? `<span class="small-sample-note">Small sample (n&lt;${SMALL_SAMPLE_N}) — interpret with caution.</span>` : '';
+}
 function isSweet(food) {
   if (!food) return false;
   const s = food.toLowerCase();
@@ -933,9 +949,9 @@ function buildTimeline() {
   const alcEl = document.getElementById('insight-alcohol');
   if (alcoholOnArr.length) {
     const pct = Math.round(alcAtOrAbove4/alcoholOnArr.length*100);
-    const alcOnAvg = avg(alcoholOnArr.map(r=>r.itch));
-    const alcOffAvg = avg(alcoholOffArr.map(r=>r.itch));
-    alcEl.innerHTML = `<strong>Alcohol</strong> ${alcAtOrAbove4} of ${alcoholOnArr.length} alcohol days (${pct}%) show itch ≥4 — avg ${alcOnAvg.toFixed(1)} vs ${alcOffAvg?.toFixed(1)||'—'} without.${pct===100 ? ' No exceptions in the current dataset.' : ''}`;
+    const alcOnVals = alcoholOnArr.map(r=>r.itch);
+    const alcOffVals = alcoholOffArr.map(r=>r.itch);
+    alcEl.innerHTML = `<strong>Alcohol</strong> ${alcAtOrAbove4} of ${alcoholOnArr.length} alcohol days (${pct}%) show itch ≥4 — avg ${statsFmt(alcOnVals)} vs ${statsFmt(alcOffVals)} without.${pct===100 ? ' No exceptions in the current dataset.' : ''}${smallSampleNote(alcOnVals, alcOffVals)}`;
   } else {
     alcEl.innerHTML = `<strong>Alcohol</strong> No alcohol days logged yet.`;
   }
@@ -944,10 +960,12 @@ function buildTimeline() {
   const vcOffArr = d.filter(r=>!r.vanicream);
   const vcEl = document.getElementById('insight-vanicream');
   if (vcOnArr.length && vcOffArr.length) {
-    const vcOnAvg = avg(vcOnArr.map(r=>r.itch));
-    const vcOffAvg = avg(vcOffArr.map(r=>r.itch));
+    const vcOnVals = vcOnArr.map(r=>r.itch);
+    const vcOffVals = vcOffArr.map(r=>r.itch);
+    const vcOnAvg = avg(vcOnVals);
+    const vcOffAvg = avg(vcOffVals);
     const direction = vcOnAvg < vcOffAvg ? 'lower' : 'higher';
-    vcEl.innerHTML = `<strong>Vanicream</strong> Days using Vanicream shampoo/conditioner average ${vcOnAvg.toFixed(1)} itch vs ${vcOffAvg.toFixed(1)} on other days — ${Math.abs(vcOnAvg-vcOffAvg).toFixed(1)} points ${direction}.`;
+    vcEl.innerHTML = `<strong>Vanicream</strong> Days using Vanicream shampoo/conditioner average ${statsFmt(vcOnVals)} itch vs ${statsFmt(vcOffVals)} on other days — ${Math.abs(vcOnAvg-vcOffAvg).toFixed(1)} points ${direction}.${smallSampleNote(vcOnVals, vcOffVals)}`;
   } else {
     vcEl.innerHTML = `<strong>Vanicream</strong> Not enough data yet to compare Vanicream vs other products.`;
   }
@@ -1102,22 +1120,22 @@ function buildCycle() {
 
   const menS = phaseStats.menses;
   document.getElementById('insight-menses').innerHTML = menS.count
-    ? `<strong>Menses (d1–5):</strong> avg itch ${menS.avg.toFixed(1)} across ${menS.count} logged day${menS.count===1?'':'s'} (range ${menS.min}–${menS.max}).${highestPhase==='menses' ? ' Currently the highest itch period in this cycle.' : ''}`
+    ? `<strong>Menses (d1–5):</strong> avg itch ${menS.avg.toFixed(1)} across ${menS.count} logged day${menS.count===1?'':'s'} (range ${menS.min}–${menS.max}).${highestPhase==='menses' ? ' Currently the highest itch period in this cycle.' : ''}${smallSampleNote(phases.menses)}`
     : `<strong>Menses (d1–5):</strong> no logged days yet in this window.`;
 
   const folS = phaseStats.follicular;
   document.getElementById('insight-follicular').innerHTML = folS.count
-    ? `<strong>Follicular phase (d6–13):</strong> avg itch ${folS.avg.toFixed(1)} across ${folS.count} logged day${folS.count===1?'':'s'} (range ${folS.min}–${folS.max}).${lowestPhase==='follicular' ? ' Currently the lowest itch period in this cycle.' : ''}${highestPhase==='follicular' ? ' Currently the highest itch period in this cycle.' : ''}`
+    ? `<strong>Follicular phase (d6–13):</strong> avg itch ${folS.avg.toFixed(1)} across ${folS.count} logged day${folS.count===1?'':'s'} (range ${folS.min}–${folS.max}).${lowestPhase==='follicular' ? ' Currently the lowest itch period in this cycle.' : ''}${highestPhase==='follicular' ? ' Currently the highest itch period in this cycle.' : ''}${smallSampleNote(phases.follicular)}`
     : `<strong>Follicular phase (d6–13):</strong> no logged days yet in this window.`;
 
   const ovS = phaseStats.ovulation;
   document.getElementById('insight-ovulation').innerHTML = ovS.count
-    ? `<strong>Ovulation window (d14–19):</strong> avg itch ${ovS.avg.toFixed(1)} across ${ovS.count} logged day${ovS.count===1?'':'s'} (range ${ovS.min}–${ovS.max}).${lowestPhase==='ovulation' ? ' Currently the lowest itch period in this cycle.' : ''}`
+    ? `<strong>Ovulation window (d14–19):</strong> avg itch ${ovS.avg.toFixed(1)} across ${ovS.count} logged day${ovS.count===1?'':'s'} (range ${ovS.min}–${ovS.max}).${lowestPhase==='ovulation' ? ' Currently the lowest itch period in this cycle.' : ''}${smallSampleNote(phases.ovulation)}`
     : `<strong>Ovulation window (d14–19):</strong> no logged days yet in this window.`;
 
   const lutS = phaseStats.luteal;
   document.getElementById('insight-luteal').innerHTML = lutS.count
-    ? `<strong>Luteal phase (d20+):</strong> avg itch ${lutS.avg.toFixed(1)} across ${lutS.count} logged day${lutS.count===1?'':'s'} (range ${lutS.min}–${lutS.max}).${highestPhase==='luteal' ? ' Currently the highest itch period in this cycle, consistent with the premenstrual pattern described in APD literature.' : ''}`
+    ? `<strong>Luteal phase (d20+):</strong> avg itch ${lutS.avg.toFixed(1)} across ${lutS.count} logged day${lutS.count===1?'':'s'} (range ${lutS.min}–${lutS.max}).${highestPhase==='luteal' ? ' Currently the highest itch period in this cycle, consistent with the premenstrual pattern described in APD literature.' : ''}${smallSampleNote(phases.luteal)}`
     : `<strong>Luteal phase (d20+):</strong> no logged days yet in this window.`;
 
   const maxDay = Math.max(32, ...cycData.map(r=>r.cycleDay));
@@ -1298,11 +1316,11 @@ function buildDiet() {
   });
   const histOn = histRows.filter(x => x.groups.length).map(x => x.r);
   const histOff = histRows.filter(x => !x.groups.length).map(x => x.r);
-  const histOnAvg = avg(histOn.map(r => r.itch));
-  const histOffAvg = avg(histOff.map(r => r.itch));
+  const histOnVals = histOn.map(r => r.itch);
+  const histOffVals = histOff.map(r => r.itch);
 
   document.getElementById('histamine-callout').innerHTML = `
-    <div><strong>Days with a likely high-histamine food: ${histOnAvg?.toFixed(1) || '—'} avg itch</strong> vs ${histOffAvg?.toFixed(1) || '—'} on days without (${histOn.length} of ${d.length} days flagged). Based on keyword matches in the food log — not a clinical assessment.</div>
+    <div><strong>Days with a likely high-histamine food: ${statsFmt(histOnVals)} avg itch</strong> vs ${statsFmt(histOffVals)} on days without (${histOn.length} of ${d.length} days flagged). Based on keyword matches in the food log — not a clinical assessment.${smallSampleNote(histOnVals, histOffVals)}</div>
   `;
 
   const groupTally = {};
