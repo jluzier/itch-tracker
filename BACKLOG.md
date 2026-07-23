@@ -59,7 +59,9 @@ Fields already captured per entry but never surfaced in any chart or callout:
       blue/navy) stay constant across themes; only surfaces, text, and chart grid/tick
       colors invert.
 - [x] Cross-tab glance stats in the header — Current streak, Logging gaps, and Last
-      log itch level promoted from the Timeline-only stat strip into a persistent strip
-      between the header and the nav tabs, visible regardless of which tab is active.
+      log itch level promoted from the Timeline-only stat strip into a persistent row
+      of compact chips between the header and the nav tabs, visible regardless of
+      which tab is active. First pass reused the full `.stat` card component and
+      looked too tall for the space; replaced with small pill-style chips instead.
       Removed the now-duplicate tiles from Timeline's strip and the old header text
       line they replaced.

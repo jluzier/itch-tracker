@@ -243,14 +243,30 @@
     gap: 12px;
     margin-bottom: 24px;
   }
-  .header-stat-strip {
-    grid-template-columns: repeat(auto-fit, minmax(130px, 200px));
+  /* ── Header chip row ── */
+  .header-chip-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
     max-width: 1200px;
-    margin: 16px auto 0;
-    padding: 0 32px;
+    margin: 0 auto;
+    padding: 10px 32px;
   }
+  .header-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 11px 5px 9px;
+    font-size: 12px;
+    color: var(--text-sec);
+  }
+  .header-chip .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .header-chip b { color: var(--text-pri); font-weight: 600; }
   @media (max-width: 768px) {
-    .header-stat-strip { padding: 0 16px; }
+    .header-chip-row { padding: 8px 16px; }
   }
   .stat {
     background: var(--surface);
@@ -467,7 +483,7 @@
   </div>
 </header>
 
-<div class="stat-strip header-stat-strip" id="strip-header"></div>
+<div class="header-chip-row" id="strip-header"></div>
 
 <nav>
   <button class="active" onclick="switchView('timeline')">Itch Timeline</button>
@@ -826,9 +842,9 @@ function renderHeaderStats() {
   const lastEntry = allData[allData.length - 1];
 
   document.getElementById('strip-header').innerHTML = `
-    <div class="stat"><div class="stat-label">Current streak</div><div class="stat-value">${streak}</div><div class="stat-sub">consecutive day${streak===1?'':'s'} logged</div></div>
-    <div class="stat"><div class="stat-label">Logging gaps</div><div class="stat-value" style="color:${gaps.length?'var(--amber)':'var(--teal)'}">${gaps.length}</div><div class="stat-sub">${totalMissingDays} missed day${totalMissingDays===1?'':'s'} total</div></div>
-    <div class="stat"><div class="stat-label">Last log</div><div class="stat-value" style="color:${lastEntry?itchColor(lastEntry.itch):'inherit'}">${lastEntry?lastEntry.itch:'—'}</div><div class="stat-sub">${lastEntry?fmtShort(lastEntry.date):'no entries yet'}</div></div>
+    <span class="header-chip"><span class="dot" style="background:var(--teal)"></span>Streak <b>${streak}d</b></span>
+    <span class="header-chip"><span class="dot" style="background:${gaps.length?'var(--amber)':'var(--teal)'}"></span>${gaps.length ? `Gaps <b>${gaps.length}</b> <span style="color:var(--text-ter)">(${totalMissingDays}d)</span>` : 'No gaps'}</span>
+    <span class="header-chip"><span class="dot" style="background:${lastEntry?itchColor(lastEntry.itch):'var(--text-ter)'}"></span>${lastEntry ? `Last log <b>itch ${lastEntry.itch}</b> <span style="color:var(--text-ter)">${fmtShort(lastEntry.date)}</span>` : 'No entries yet'}</span>
   `;
 }
 
