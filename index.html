@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Itch Tracker Dashboard</title>
+<script>
+(function() {
+  const saved = localStorage.getItem('theme');
+  const theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
@@ -25,10 +32,28 @@
     --blue:      #1A5A9A;
     --blue-lt:   #E6F0FB;
     --navy:      #16294F;
+    --accent-fg: #16294F; /* navy, but legible as text/border on --surface — swaps in dark theme since navy itself doesn't */
     --chart-grid: rgba(0,0,0,0.05);
     --radius:    10px;
     --mono:      'DM Mono', monospace;
     --sans:      'DM Sans', sans-serif;
+  }
+
+  /* Accent hues (teal/amber/red/blue/navy) stay constant across themes —
+     only surfaces, text, and their tinted backgrounds invert. */
+  :root[data-theme="dark"] {
+    --bg:        #16171C;
+    --surface:   #1E2028;
+    --border:    #2C2E36;
+    --text-pri:  #ECECEA;
+    --text-sec:  #9C9890;
+    --text-ter:  #726F68;
+    --teal-lt:   #16332B;
+    --amber-lt:  #3A2C14;
+    --red-lt:    #3A1E1E;
+    --blue-lt:   #16233A;
+    --accent-fg: #7FA8DE;
+    --chart-grid: rgba(255,255,255,0.08);
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -105,6 +130,18 @@
     transition: background 0.15s;
   }
   #refresh-btn:hover { background: rgba(255,255,255,0.25); }
+  #theme-toggle-btn {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    font-size: 13px;
+    line-height: 1;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  #theme-toggle-btn:hover { background: rgba(255,255,255,0.25); }
 
   /* ── Nav tabs ── */
   nav {
@@ -129,7 +166,7 @@
     transition: color 0.15s, border-color 0.15s;
   }
   nav button:hover { color: var(--text-pri); }
-  nav button.active { color: var(--navy); border-bottom-color: var(--navy); }
+  nav button.active { color: var(--accent-fg); border-bottom-color: var(--accent-fg); }
 
   /* ── Cycle submenu ── */
   .cycle-subnav { display: flex; gap: 8px; margin-bottom: 16px; }
@@ -147,7 +184,7 @@
     cursor: pointer;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
-  .pill-tab:hover:not(:disabled) { color: var(--text-pri); border-color: var(--navy); }
+  .pill-tab:hover:not(:disabled) { color: var(--text-pri); border-color: var(--accent-fg); }
   .pill-tab.active { background: var(--navy); border-color: var(--navy); color: #fff; }
   .pill-tab:disabled { opacity: 0.4; cursor: not-allowed; }
   .pill-tab.pill-tab-ghost { margin-left: auto; }
@@ -321,10 +358,10 @@
     border-radius: 4px;
     font-weight: 500;
   }
-  .phase-menses   { background: #FCEAEA; color: var(--red); }
-  .phase-follicular { background: #E6F0FB; color: var(--blue); }
-  .phase-ovulation  { background: #E1F5EE; color: var(--teal); }
-  .phase-luteal     { background: #FDF3E3; color: var(--amber); }
+  .phase-menses   { background: var(--red-lt); color: var(--red); }
+  .phase-follicular { background: var(--blue-lt); color: var(--blue); }
+  .phase-ovulation  { background: var(--teal-lt); color: var(--teal); }
+  .phase-luteal     { background: var(--amber-lt); color: var(--amber); }
 
   /* ── Loading / error ── */
   #loading-screen {
@@ -417,6 +454,7 @@
       <a href="https://docs.google.com/spreadsheets/d/1ML-pD4w8UX7ZAJtpgWLPhnX72q3EXohqr2TTDyzDHHI/edit?usp=sharing" target="_blank" rel="noopener">Source Data</a>
     </div>
     <span id="entry-count" style="font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.6);"></span>
+    <button id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle dark mode"></button>
     <button id="refresh-btn" onclick="loadData()">↻ Refresh</button>
   </div>
 </header>
@@ -568,10 +606,24 @@ let cycleStartDetected = false;
 let cycleStarts = []; // all detected cycle start dates, ascending
 let viewingCycleOffset = 0; // 0 = current cycle, 1 = last (previous) cycle
 
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function toggleTheme() {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+  document.getElementById('theme-toggle-btn').textContent = next === 'dark' ? '☀' : '🌙';
+  Chart.defaults.color = cssVar('--text-sec');
+  if (allData.length) buildAll();
+}
+
 // Chart.js defaults
 Chart.defaults.font.family = "'DM Sans', sans-serif";
 Chart.defaults.font.size = 11;
-Chart.defaults.color = '#6B6760';
+Chart.defaults.color = cssVar('--text-sec');
+document.getElementById('theme-toggle-btn').textContent =
+  document.documentElement.getAttribute('data-theme') === 'dark' ? '☀' : '🌙';
 
 let charts = {};
 let allData = [];
@@ -847,9 +899,9 @@ const HISTAMINE_GROUPS = [
   { label: 'Banana',               keywords: ['banana'] },
 ];
 function gridOpts() {
-  return { color: 'rgba(0,0,0,0.05)', drawBorder: false };
+  return { color: cssVar('--chart-grid'), drawBorder: false };
 }
-function tickOpts() { return { color: '#A09C97' }; }
+function tickOpts() { return { color: cssVar('--text-ter') }; }
 
 function destroyChart(id) {
   if (charts[id]) { charts[id].destroy(); delete charts[id]; }
@@ -1054,7 +1106,7 @@ function buildTimeline() {
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: c=>`${c.raw} days at itch ${c.label}` } } },
       scales: {
-        x: { title:{display:true,text:'Itch level',color:'#A09C97',font:{size:10}}, ticks:tickOpts(), grid:gridOpts() },
+        x: { title:{display:true,text:'Itch level',color:cssVar('--text-ter'),font:{size:10}}, ticks:tickOpts(), grid:gridOpts() },
         y: { ticks:tickOpts(), grid:gridOpts() }
       }
     }
@@ -1163,11 +1215,11 @@ function buildCycle() {
       },
       scales: {
         x: { type:'linear', min:0, max:maxDay,
-          title:{display:true,text:'Estimated cycle day',color:'#A09C97',font:{size:10}},
+          title:{display:true,text:'Estimated cycle day',color:cssVar('--text-ter'),font:{size:10}},
           ticks:{ ...tickOpts(), stepSize:2 }, grid:gridOpts(),
           // Phase background via annotation-like approach using afterDraw
         },
-        y: { min:0, max:10, title:{display:true,text:'Itch level',color:'#A09C97',font:{size:10}}, ticks:tickOpts(), grid:gridOpts() }
+        y: { min:0, max:10, title:{display:true,text:'Itch level',color:cssVar('--text-ter'),font:{size:10}}, ticks:tickOpts(), grid:gridOpts() }
       }
     },
     // Draw phase bands — must be a top-level plugins array, not nested under options.plugins
@@ -1256,7 +1308,7 @@ function buildDiet() {
       plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>`Avg itch: ${c.raw}`}} },
       scales: {
         x: { ticks:{...tickOpts(),font:{size:10}}, grid:gridOpts() },
-        y: { min:0, max:10, ticks:tickOpts(), grid:gridOpts(), title:{display:true,text:'Avg itch level',color:'#A09C97',font:{size:10}} }
+        y: { min:0, max:10, ticks:tickOpts(), grid:gridOpts(), title:{display:true,text:'Avg itch level',color:cssVar('--text-ter'),font:{size:10}} }
       }
     }
   });

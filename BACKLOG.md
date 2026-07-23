@@ -53,4 +53,7 @@ Fields already captured per entry but never surfaced in any chart or callout:
       stats stay computed over full history regardless of the selected window).
 - [ ] Colorblind-safe severity encoding — severity is currently color-only
       (red/amber/teal); add a text or shape fallback.
-- [ ] Dark mode.
+- [x] Dark mode — toggle button in the header, persisted in `localStorage`, defaulting
+      to the OS `prefers-color-scheme` on first visit. Accent colors (teal/amber/red/
+      blue/navy) stay constant across themes; only surfaces, text, and chart grid/tick
+      colors invert.
