@@ -186,6 +186,28 @@
   .factor-panel { min-width: 0; }
   .factor-title { font-size: 12px; font-family: var(--mono); color: var(--text-sec); margin-bottom: 6px; }
   .factor-stats { font-size: 12px; color: var(--text-sec); margin-top: 6px; }
+  .summary-page { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+  .sum-h { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+  .sum-sub { font-size: 12px; color: var(--text-sec); margin-bottom: 14px; }
+  .sum-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .sum-kpi { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  .sum-kpi .v { font-size: 18px; font-family: var(--mono); }
+  .sum-kpi .l { font-size: 11px; color: var(--text-sec); }
+  .sum-spark-wrap { margin-bottom: 4px; }
+  .sum-spark-dates { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-ter); font-family: var(--mono); }
+  .sum-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 14px; }
+  .sum-table th, .sum-table td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .sum-table th { font-size: 11px; color: var(--text-sec); font-weight: 600; }
+  .sum-foot { font-size: 10px; color: var(--text-ter); margin-top: 12px; line-height: 1.4; }
+  @media print {
+    @page { size: letter; margin: 0.5in; }
+    body * { visibility: hidden; }
+    #view-summary, #view-summary * { visibility: visible; }
+    #view-summary { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
+    .no-print { display: none !important; }
+    .summary-page { border: none; padding: 0; background: #fff; }
+    .summary-page * { color: #000 !important; }
+  }
   .combo-label { font-size: 12px; color: var(--text-sec); display: flex; gap: 6px; align-items: center; }
   .combo-select { font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-pri); }
 
@@ -488,6 +510,7 @@
   <button onclick="switchView('cycle')">Cycle Mapping</button>
   <button onclick="switchView('diet')">Diet Consistency</button>
   <button onclick="switchView('factors')">Factors</button>
+  <button onclick="switchView('summary')">Visit Summary</button>
 </nav>
 
 <main>
@@ -579,6 +602,14 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- ── VIEW 5: VISIT SUMMARY ── -->
+  <div id="view-summary" class="view">
+    <div class="no-print" style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+      <button class="pill-tab active" onclick="window.print()">Print / save as PDF</button>
+    </div>
+    <div class="summary-page" id="summary-body"></div>
   </div>
 
   <!-- ── VIEW 4: FACTORS ── -->
@@ -1066,6 +1097,101 @@ function buildAll() {
   buildDiet();
   buildFactors();
   buildCombos();
+  buildSummary();
+}
+
+// ── Visit summary (printable) ──────────────────────────
+const SUMMARY_GAP_DAYS = 14;
+function summaryCutoff(data) {
+  for (let i = data.length - 1; i > 0; i--) {
+    const gap = (data[i].date - data[i-1].date) / 86400000;
+    if (gap > SUMMARY_GAP_DAYS) return { cutoff: data[i-1].date, gapDays: Math.round(gap) };
+  }
+  return { cutoff: data.length ? data[data.length-1].date : null, gapDays: 0 };
+}
+function fmtDate(d) {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function sparkSvg(rows, start, end) {
+  const W = 600, H = 80;
+  const span = Math.max(1, (end - start) / 86400000);
+  const X = d => ((d - start) / 86400000) / span * W;
+  const Y = v => H - (v / 10) * H;
+  const runs = [[]];
+  rows.forEach((r, i) => {
+    if (i > 0 && (r.date - rows[i-1].date) / 86400000 > 3) runs.push([]);
+    runs[runs.length-1].push(`${X(r.date).toFixed(1)},${Y(r.itch).toFixed(1)}`);
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:80px;display:block;">
+    <line x1="0" x2="${W}" y1="${Y(7)}" y2="${Y(7)}" stroke="#B53030" stroke-dasharray="4 4" stroke-width="1" vector-effect="non-scaling-stroke" opacity="0.5"/>
+    ${runs.filter(p => p.length).map(p => `<polyline points="${p.join(' ')}" fill="none" stroke="#1F6E56" stroke-width="2" vector-effect="non-scaling-stroke"/>`).join('')}
+  </svg>`;
+}
+function summaryRow(factor, groups) {
+  const cells = groups.map(g => g.vals.length ? `${g.name} ${avg(g.vals).toFixed(1)} (n=${g.vals.length})` : `${g.name}: no data`).join(' · ');
+  const small = groups.some(g => g.vals.length && g.vals.length < SMALL_SAMPLE_N);
+  return `<tr><td>${factor}</td><td>${cells}${small ? ' <span class="small-sample-note">small sample</span>' : ''}</td></tr>`;
+}
+function corrRow(factor, pairs) {
+  const r = pearson(pairs);
+  const txt = r === null ? 'not enough data' : `r = ${r.toFixed(2)} (${corrWord(r)})`;
+  const small = pairs.length && pairs.length < SMALL_SAMPLE_N ? ' <span class="small-sample-note">small sample</span>' : '';
+  return `<tr><td>${factor}</td><td>${txt} · n=${pairs.length}${small}</td></tr>`;
+}
+function buildSummary() {
+  const { cutoff, gapDays } = summaryCutoff(allData);
+  const rows = allData.filter(r => r.date <= cutoff);
+  const excluded = allData.length - rows.length;
+  if (!rows.length) { document.getElementById('summary-body').innerHTML = 'No data yet.'; return; }
+  const first = rows[0].date, last = rows[rows.length-1].date;
+  const periodDays = Math.round((last - first) / 86400000) + 1;
+  const coverage = Math.round(rows.length / periodDays * 100);
+  const itch = rows.map(r => r.itch);
+  const severe = itch.filter(v => v >= 7).length, low = itch.filter(v => v <= 2).length;
+  const peakCounts = {};
+  rows.forEach(r => { const p = (r.peakTime || '').trim(); if (p && !p.startsWith('No peak')) peakCounts[p] = (peakCounts[p] || 0) + 1; });
+  const topPeak = Object.entries(peakCounts).sort((a,b) => b[1]-a[1])[0];
+
+  const kpis = [
+    [avg(itch).toFixed(1), 'avg itch (0–10)'],
+    [`${Math.round(severe / itch.length * 100)}%`, 'days itch ≥ 7'],
+    [`${Math.round(low / itch.length * 100)}%`, 'days itch ≤ 2'],
+    [topPeak ? topPeak[0] : '—', 'most common peak time'],
+  ].map(([v, l]) => `<div class="sum-kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+
+  const phaseVals = name => rows.filter(r => phaseLabel(r.date) === name).map(r => r.itch);
+  const rowsHtml = [
+    summaryRow('Alcohol', [
+      { name: 'Yes', vals: rows.filter(r => r.alcohol).map(r => r.itch) },
+      { name: 'No', vals: rows.filter(r => !r.alcohol).map(r => r.itch) },
+    ]),
+    summaryRow('Vanicream shampoo/conditioner', [
+      { name: 'Yes', vals: rows.filter(r => r.vanicream).map(r => r.itch) },
+      { name: 'No', vals: rows.filter(r => !r.vanicream).map(r => r.itch) },
+    ]),
+    summaryRow('Cycle phase', ['Menses','Follicular','Ovulation','Luteal'].map(n => ({ name: n, vals: phaseVals(n) }))),
+    corrRow('Stress vs itch', rows.filter(r => r.stress != null).map(r => ({ x: r.stress, y: r.itch }))),
+    corrRow('Sleep quality vs itch', rows.filter(r => r.sleep != null).map(r => ({ x: r.sleep, y: r.itch }))),
+    corrRow('Hydration vs itch', rows.filter(r => r.hydration != null).map(r => ({ x: r.hydration, y: r.itch }))),
+    corrRow('Temp high vs itch', rows.filter(r => r.tempHi != null).map(r => ({ x: r.tempHi, y: r.itch }))),
+    corrRow('Humidity vs itch', rows.filter(r => r.humidity != null).map(r => ({ x: r.humidity, y: r.itch }))),
+  ].join('');
+
+  document.getElementById('summary-body').innerHTML = `
+    <div class="sum-h">Itch tracker summary</div>
+    <div class="sum-sub">${fmtDate(first)} – ${fmtDate(last)} · ${rows.length} days logged (${coverage}% of period) · self-reported daily entries</div>
+    <div class="sum-grid">${kpis}</div>
+    <div class="sum-spark-wrap">${sparkSvg(rows, first, last)}</div>
+    <div class="sum-spark-dates"><span>${fmtDate(first)}</span><span>dashed line = itch 7</span><span>${fmtDate(last)}</span></div>
+    <table class="sum-table">
+      <thead><tr><th style="width:30%">Factor</th><th>Average itch or correlation with itch</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    <div class="sum-foot">
+      ${excluded ? `Entries after ${fmtDate(cutoff)} (${excluded}) are excluded because of a ${gapDays}-day logging gap. ` : ''}
+      Self-reported and observational: patterns are associations, not causes, and are not adjusted for medications or other factors.
+      Correlations use same-day values. Groups with n&lt;${SMALL_SAMPLE_N} are flagged as small samples.
+    </div>`;
 }
 
 // ── Combinations (any two factors) ─────────────────────
