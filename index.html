@@ -200,10 +200,10 @@
   .sum-table th { font-size: 11px; color: var(--text-sec); font-weight: 600; }
   .sum-foot { font-size: 10px; color: var(--text-ter); margin-top: 12px; line-height: 1.4; }
   @media print {
-    @page { size: letter; margin: 0.5in; }
+    @page { size: letter; margin: 0.5in 0; }
     body * { visibility: hidden; }
     #view-summary, #view-summary * { visibility: visible; }
-    #view-summary { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
+    #view-summary { position: absolute; left: 0; top: 0; width: 100%; padding: 0 0.5in; box-sizing: border-box; display: block !important; }
     .no-print { display: none !important; }
     .summary-page { border: none; padding: 0; background: #fff; }
     .summary-page * { color: #000 !important; }
