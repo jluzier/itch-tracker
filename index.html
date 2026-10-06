@@ -182,6 +182,10 @@
   .pill-tab.active { background: var(--navy); border-color: var(--navy); color: #fff; }
   .pill-tab:disabled { opacity: 0.4; cursor: not-allowed; }
   .pill-tab.pill-tab-ghost { margin-left: auto; }
+  .factor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .factor-panel { min-width: 0; }
+  .factor-title { font-size: 12px; font-family: var(--mono); color: var(--text-sec); margin-bottom: 6px; }
+  .factor-stats { font-size: 12px; color: var(--text-sec); margin-top: 6px; }
 
   /* ── Cycle start editor ── */
   .cycle-editor-row {
@@ -481,6 +485,7 @@
   <button class="active" onclick="switchView('timeline')">Itch Timeline</button>
   <button onclick="switchView('cycle')">Cycle Mapping</button>
   <button onclick="switchView('diet')">Diet Consistency</button>
+  <button onclick="switchView('factors')">Factors</button>
 </nav>
 
 <main>
@@ -570,6 +575,36 @@
         <div class="callout callout-amber">
           <div id="insight-luteal"></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── VIEW 4: FACTORS ── -->
+  <div id="view-factors" class="view">
+    <div class="card">
+      <div class="card-title">Lifestyle factors vs itch <span style="font-size:11px;color:var(--text-ter);">select one or more · same-day</span></div>
+      <div class="range-filter" id="factor-picker"></div>
+      <div class="factor-grid" id="factor-panels"></div>
+      <div class="callout callout-blue" style="margin-top:12px;">
+        <div id="insight-factors"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Weather vs itch</div>
+      <div class="two-col">
+        <div class="factor-panel">
+          <div class="factor-title">Temp high (°F) vs itch</div>
+          <div class="chart-container" style="height:200px;"><canvas id="chart-temp"></canvas></div>
+          <div class="factor-stats" id="stats-temp"></div>
+        </div>
+        <div class="factor-panel">
+          <div class="factor-title">Humidity (%) vs itch</div>
+          <div class="chart-container" style="height:200px;"><canvas id="chart-humidity"></canvas></div>
+          <div class="factor-stats" id="stats-humidity"></div>
+        </div>
+      </div>
+      <div class="callout callout-amber" style="margin-top:12px;">
+        <div id="insight-weather"></div>
       </div>
     </div>
   </div>
@@ -1014,6 +1049,105 @@ function buildAll() {
   buildTimeline();
   buildCycle();
   buildDiet();
+  buildFactors();
+}
+
+// ── VIEW 4: Factors ────────────────────────────────────
+const FACTORS = [
+  { key: 'stress',    label: 'Stress',    color: '#1A5A9A' },
+  { key: 'sleep',     label: 'Sleep',     color: '#1F6E56' },
+  { key: 'hydration', label: 'Hydration', color: '#B86E0A' },
+];
+const WEATHER = [
+  { key: 'tempHi',   label: 'Temp high (°F)', id: 'chart-temp',     statsId: 'stats-temp',     color: '#16294F' },
+  { key: 'humidity', label: 'Humidity (%)',   id: 'chart-humidity', statsId: 'stats-humidity', color: '#1A5A9A' },
+];
+let selectedFactors = new Set(['stress']);
+
+function pearson(pairs) {
+  const n = pairs.length;
+  if (n < 3) return null;
+  const mx = avg(pairs.map(p=>p.x)), my = avg(pairs.map(p=>p.y));
+  let num = 0, dx = 0, dy = 0;
+  pairs.forEach(({x,y}) => { const a = x-mx, b = y-my; num += a*b; dx += a*a; dy += b*b; });
+  return dx && dy ? num / Math.sqrt(dx*dy) : null;
+}
+function corrWord(r) {
+  const a = Math.abs(r);
+  if (a < 0.1) return 'no clear';
+  const s = a < 0.3 ? 'weak' : a < 0.5 ? 'moderate' : 'strong';
+  return `${s} ${r > 0 ? 'positive' : 'negative'}`;
+}
+function factorPairs(d, key) {
+  return d.filter(r => r[key] != null).map(r => ({ x: r[key], y: r.itch }));
+}
+function scatterChart(id, pairs, color, xLabel) {
+  destroyChart(id);
+  const ctx = document.getElementById(id).getContext('2d');
+  const maxX = Math.ceil(Math.max(...pairs.map(p=>p.x))) || 1;
+  charts[id] = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets: [{ data: pairs, backgroundColor: color, pointRadius: 5, pointHoverRadius: 7 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: c => `${xLabel} ${c.raw.x} → itch ${c.raw.y}` } } },
+      scales: {
+        x: { min: 0, max: maxX, ticks: { ...tickOpts(), stepSize: 1 }, grid: gridOpts() },
+        y: { min: 0, max: 10, ticks: tickOpts(), grid: gridOpts() }
+      }
+    }
+  });
+}
+function statsLine(pairs, r) {
+  if (r === null) return `n=${pairs.length} · not enough data for a correlation yet`;
+  return `n=${pairs.length} · r = ${r.toFixed(2)} (${corrWord(r)})`;
+}
+function toggleFactor(key) {
+  selectedFactors.has(key) ? selectedFactors.delete(key) : selectedFactors.add(key);
+  buildFactors();
+}
+function buildFactors() {
+  const d = allData;
+  document.getElementById('factor-picker').innerHTML = FACTORS.map(f =>
+    `<button class="pill-tab ${selectedFactors.has(f.key)?'active':''}" onclick="toggleFactor('${f.key}')">${f.label}</button>`
+  ).join('');
+
+  Object.keys(charts).filter(k => k.startsWith('chart-factor-')).forEach(destroyChart);
+  const picked = FACTORS.filter(f => selectedFactors.has(f.key));
+  const panels = document.getElementById('factor-panels');
+  panels.innerHTML = picked.map(f => `
+    <div class="factor-panel">
+      <div class="factor-title">${f.label} vs itch</div>
+      <div class="chart-container" style="height:200px;"><canvas id="chart-factor-${f.key}"></canvas></div>
+      <div class="factor-stats" id="stats-factor-${f.key}"></div>
+    </div>`).join('');
+
+  const factorInsights = picked.map(f => {
+    const pairs = factorPairs(d, f.key);
+    const r = pearson(pairs);
+    document.getElementById(`stats-factor-${f.key}`).textContent = statsLine(pairs, r);
+    scatterChart(`chart-factor-${f.key}`, pairs, f.color, f.label);
+    if (r === null) return `<strong>${f.label}</strong> Not enough logged days yet to compare.`;
+    const read = Math.abs(r) < 0.1
+      ? 'No clear linear relationship with itch.'
+      : `${r > 0 ? 'Higher' : 'Lower'} ${f.label.toLowerCase()} days tend to show ${r > 0 ? 'higher' : 'lower'} itch (${corrWord(r)} correlation).`;
+    return `<strong>${f.label}</strong> r = ${r.toFixed(2)}, n=${pairs.length}. ${read}${smallSampleNote(pairs)}`;
+  });
+  document.getElementById('insight-factors').innerHTML = picked.length
+    ? factorInsights.join('<br>')
+    : 'Select a factor above to compare it with itch.';
+
+  const weatherInsights = WEATHER.map(w => {
+    const pairs = factorPairs(d, w.key);
+    const r = pearson(pairs);
+    document.getElementById(w.statsId).textContent = statsLine(pairs, r);
+    scatterChart(w.id, pairs, w.color, w.label);
+    if (r === null) return `<strong>${w.label}</strong> not enough data yet.`;
+    return `<strong>${w.label}</strong> r = ${r.toFixed(2)}, n=${pairs.length} (${corrWord(r)}).`;
+  });
+  document.getElementById('insight-weather').innerHTML =
+    `<strong>Weather</strong> ${weatherInsights.join(' ')} Same-day comparisons only.`;
 }
 
 // ── VIEW 1: Timeline ───────────────────────────────────

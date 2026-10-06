@@ -17,8 +17,9 @@ than opening issues for the whole backlog up front.
 Fields already captured per entry but never surfaced in any chart or callout:
 `stress`, `sleep`, `hydration`, `tempHi`, `humidity`.
 
-- [ ] Surface stress / sleep / hydration / weather correlations against itch level —
-      cheapest high-value win since the data is already being collected.
+- [x] Surface stress / sleep / hydration / weather correlations against itch level —
+      new Factors tab: multi-select toggles for stress/sleep/hydration, one scatter per
+      selected factor with n and Pearson r, plus separate temp and humidity charts.
 - [ ] Lagged-effect view — all current comparisons (alcohol, Vanicream, histamine foods)
       are same-day only. Add a "next-day itch" comparison alongside same-day, since
       flares from food/alcohol/hormones often show up 12–48h later.
