@@ -501,6 +501,13 @@
         <div class="legend-item"><div class="legend-dot" style="background:#1F6E56;"></div> Low (0–3)</div>
       </div>
     </div>
+    <div class="card">
+      <div class="card-title">Avg itch: Justin home vs away</div>
+      <div class="chart-container" style="height:180px;"><canvas id="chart-justin"></canvas></div>
+      <div class="callout callout-blue" style="margin-top:12px;">
+        <div id="insight-justin"></div>
+      </div>
+    </div>
     <div class="two-col">
       <div class="card">
         <div class="card-title">Peak time of day</div>
@@ -898,6 +905,21 @@ function smallSampleNote(...arrs) {
   const small = arrs.some(a => a.length > 0 && a.length < SMALL_SAMPLE_N);
   return small ? `<span class="small-sample-note">Small sample (n&lt;${SMALL_SAMPLE_N}) — interpret with caution.</span>` : '';
 }
+// 'Justin?' column: Yes = home, N = away, "In NY" = Stefanie with Justin in NY.
+function classifyJustin(val) {
+  const v = (val || '').trim().toLowerCase();
+  if (!v) return null;
+  if (v.includes('ny')) return 'ny';
+  if (v === 'yes' || v === 'y') return 'home';
+  if (v === 'n' || v === 'no') return 'away';
+  return null;
+}
+function justinLabel(key) {
+  return { home: 'Home', away: 'Away', ny: 'In NY' }[key] || key;
+}
+function justinColor(key) {
+  return { home: '#1F6E56', away: '#A09C97', ny: '#1A5A9A' }[key] || '#888';
+}
 function isSweet(food) {
   if (!food) return false;
   const s = food.toLowerCase();
@@ -963,6 +985,7 @@ async function loadData() {
           menstrual: (row['Menstrual Cycle'] || '').toLowerCase() === 'yes',
           tempHi: parseFloat(row['Weather Temp High (°F)']) || null,
           humidity: parseFloat(row['Humidity (%)']) || null,
+          justin: classifyJustin(row['Justin?']),
         };
       })
       .filter(r => r.date)
@@ -1043,6 +1066,19 @@ function buildTimeline() {
     vcEl.innerHTML = `<strong>Vanicream</strong> Not enough data yet to compare Vanicream vs other products.`;
   }
 
+  // Justin home/away/in-NY insight callout
+  const justinGroups = { home: [], away: [], ny: [] };
+  d.forEach(r => { if (r.justin && justinGroups[r.justin]) justinGroups[r.justin].push(r.itch); });
+  const jEl = document.getElementById('insight-justin');
+  if (justinGroups.home.length || justinGroups.away.length || justinGroups.ny.length) {
+    const parts = ['home','away','ny']
+      .filter(k => justinGroups[k].length)
+      .map(k => `${justinLabel(k)} ${statsFmt(justinGroups[k])}`);
+    jEl.innerHTML = `<strong>Justin home / away</strong> ${parts.join(' vs ')}.${smallSampleNote(justinGroups.home, justinGroups.away, justinGroups.ny)}`;
+  } else {
+    jEl.innerHTML = `<strong>Justin home / away</strong> No "Justin?" entries logged yet.`;
+  }
+
   const gapsEl = document.getElementById('insight-gaps');
   if (!gaps.length) {
     gapsEl.innerHTML = `<strong>Logging gaps</strong> No gaps — every day in range has a log entry. Current streak: ${streak} day${streak===1?'':'s'}.`;
@@ -1078,12 +1114,37 @@ function buildTimeline() {
           const r = d[c.dataIndex];
           const parts = [`Itch: ${r.itch}`];
           if (r.alcohol) parts.push('Alcohol: yes');
+          if (r.justin) parts.push(`Justin: ${justinLabel(r.justin)}`);
           if (r.notes) parts.push(r.notes.substring(0,50));
           return parts;
         }}}
       },
       scales: {
         x: { ticks: { ...tickOpts(), maxRotation: 45, autoSkip: true }, grid: gridOpts() },
+        y: { min: 0, max: 10, ticks: tickOpts(), grid: gridOpts() }
+      }
+    }
+  });
+
+  // Justin home/away/in-NY bar chart
+  destroyChart('justin');
+  const justinKeys = ['home','away','ny'].filter(k => justinGroups[k].length);
+  const ctxJ = document.getElementById('chart-justin').getContext('2d');
+  charts['justin'] = new Chart(ctxJ, {
+    type: 'bar',
+    data: {
+      labels: justinKeys.map(justinLabel),
+      datasets: [{
+        data: justinKeys.map(k => avg(justinGroups[k])?.toFixed(1) || 0),
+        backgroundColor: justinKeys.map(justinColor),
+        borderRadius: 4, borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `Avg itch: ${c.raw} (n=${justinGroups[justinKeys[c.dataIndex]].length})` } } },
+      scales: {
+        x: { ticks: tickOpts(), grid: gridOpts() },
         y: { min: 0, max: 10, ticks: tickOpts(), grid: gridOpts() }
       }
     }

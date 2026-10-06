@@ -28,6 +28,10 @@ Fields already captured per entry but never surfaced in any chart or callout:
       "small sample" caution note (n<5) across those and the four cycle-phase callouts.
 - [ ] Multi-factor combinations — e.g. alcohol-during-luteal vs alcohol-during-follicular.
       Factors are currently only ever evaluated in isolation.
+- [x] Justin home/away/in-NY correlation — new "Avg itch: Justin home vs away" bar
+      chart + insight callout on the Timeline tab, parsing the sheet's new `Justin?`
+      column (Yes/N/In NY) added to track whether Stefanie being with vs. away from
+      Justin correlates with itch level.
 
 ## Clinical / Doctor-Visit Use
 
