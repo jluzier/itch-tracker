@@ -37,8 +37,14 @@ Fields already captured per entry but never surfaced in any chart or callout:
 
 ## Clinical / Doctor-Visit Use
 
-- [ ] Printable one-page visit summary — condensed export of the top insights across all
-      three tabs, since this app exists to support an APD conversation with a provider.
+- [x] Printable one-page visit summary — Visit Summary tab with coverage, KPIs, itch
+      sparkline, factor table with n, itch locations, and severe-day note excerpts.
+      Print CSS limits output to one letter page. Data is cut off before the most recent
+      14+ day logging gap.
+- [ ] Visit summary: PCP version — broader overall-burden framing (sleep, stress,
+      cycle) for a primary care visit, vs. the dermatology-focused layout.
+- [ ] Visit summary: treatments tried — add a field for medications and topical
+      treatments so the summary can show what was used during each period.
 - [ ] CSV/JSON export of the processed dataset, for handing to a provider directly
       rather than linking the raw sheet.
 
