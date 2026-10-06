@@ -186,6 +186,8 @@
   .factor-panel { min-width: 0; }
   .factor-title { font-size: 12px; font-family: var(--mono); color: var(--text-sec); margin-bottom: 6px; }
   .factor-stats { font-size: 12px; color: var(--text-sec); margin-top: 6px; }
+  .combo-label { font-size: 12px; color: var(--text-sec); display: flex; gap: 6px; align-items: center; }
+  .combo-select { font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-pri); }
 
   /* ── Cycle start editor ── */
   .cycle-editor-row {
@@ -605,6 +607,19 @@
       </div>
       <div class="callout callout-amber" style="margin-top:12px;">
         <div id="insight-weather"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Combinations <span style="font-size:11px;color:var(--text-ter);">pick two factors · cells under n=3 hidden</span></div>
+      <div class="range-filter" style="gap:16px;flex-wrap:wrap;">
+        <label class="combo-label">Factor A <select class="combo-select" id="combo-a" onchange="setCombo('a', this.value)"></select></label>
+        <span style="color:var(--text-ter);">×</span>
+        <label class="combo-label">Factor B <select class="combo-select" id="combo-b" onchange="setCombo('b', this.value)"></select></label>
+      </div>
+      <div class="chart-container" style="height:260px;"><canvas id="chart-combo"></canvas></div>
+      <div class="factor-stats" id="stats-combo"></div>
+      <div class="callout callout-blue" style="margin-top:12px;">
+        <div id="insight-combo"></div>
       </div>
     </div>
   </div>
@@ -1050,6 +1065,153 @@ function buildAll() {
   buildCycle();
   buildDiet();
   buildFactors();
+  buildCombos();
+}
+
+// ── Combinations (any two factors) ─────────────────────
+const COMBO_FACTORS = [
+  { key: 'justin',    label: 'Justin',      type: 'cat', levels: ['Home','Away','In NY'],
+    value: r => r.justin ? justinLabel(r.justin) : null },
+  { key: 'alcohol',   label: 'Alcohol',     type: 'cat', levels: ['Yes','No'],
+    value: r => r.alcohol ? 'Yes' : 'No' },
+  { key: 'vanicream', label: 'Vanicream',   type: 'cat', levels: ['Yes','No'],
+    value: r => r.vanicream ? 'Yes' : 'No' },
+  { key: 'phase',     label: 'Cycle phase', type: 'cat', levels: ['Menses','Follicular','Ovulation','Luteal'],
+    value: r => phaseLabel(r.date) },
+  { key: 'stress',    label: 'Stress',      type: 'num', value: r => r.stress },
+  { key: 'sleep',     label: 'Sleep',       type: 'num', value: r => r.sleep },
+  { key: 'hydration', label: 'Hydration',   type: 'num', value: r => r.hydration },
+];
+const COMBO_MIN_N = 3;
+const COMBO_COLORS = ['#1F6E56','#B86E0A','#1A5A9A','#B53030'];
+let comboA = 'justin', comboB = 'stress';
+
+function phaseFor(date) {
+  if (!date || !cycleStarts.length) return null;
+  const start = [...cycleStarts].sort((a,b)=>a-b).filter(s => s <= date).pop();
+  return start ? cyclePhase(cycleDay(date, start)) : null;
+}
+function phaseLabel(date) {
+  const p = phaseFor(date);
+  return p ? p[0].toUpperCase() + p.slice(1) : null;
+}
+function setCombo(slot, key) {
+  if (slot === 'a') comboA = key; else comboB = key;
+  buildCombos();
+}
+function buildCombos() {
+  const selA = document.getElementById('combo-a'), selB = document.getElementById('combo-b');
+  if (!selA.options.length) {
+    const opts = COMBO_FACTORS.map(f => `<option value="${f.key}">${f.label}</option>`).join('');
+    selA.innerHTML = opts; selB.innerHTML = opts;
+  }
+  selA.value = comboA; selB.value = comboB;
+  destroyChart('combo');
+  const statsEl = document.getElementById('stats-combo');
+  const insightEl = document.getElementById('insight-combo');
+  statsEl.textContent = '';
+  if (comboA === comboB) { insightEl.innerHTML = 'Pick two different factors.'; return; }
+
+  const A = COMBO_FACTORS.find(f => f.key === comboA);
+  const B = COMBO_FACTORS.find(f => f.key === comboB);
+  const rows = allData
+    .map(r => ({ a: A.value(r), b: B.value(r), itch: r.itch }))
+    .filter(x => x.a != null && x.b != null);
+  if (!rows.length) { insightEl.innerHTML = 'No days with both factors logged yet.'; return; }
+  statsEl.textContent = `${rows.length} days with both factors logged`;
+
+  if (A.type === 'cat' && B.type === 'cat') return renderComboCatCat(A, B, rows);
+  if (A.type === 'cat' || B.type === 'cat') {
+    const catIsA = A.type === 'cat';
+    const pts = rows.map(x => ({ c: catIsA ? x.a : x.b, v: catIsA ? x.b : x.a, itch: x.itch }));
+    return renderComboCatNum(catIsA ? A : B, catIsA ? B : A, pts);
+  }
+  insightEl.innerHTML = 'Two numeric factors are shown on the Factors tab. Pick a categorical factor (Justin, alcohol, Vanicream, cycle phase) to split by.';
+}
+function renderComboCatCat(A, B, rows) {
+  const cellVals = (al, bl) => rows.filter(x => x.a === al && x.b === bl).map(x => x.itch);
+  const bLevels = B.levels.filter(bl => rows.some(x => x.b === bl));
+  const datasets = bLevels.map((bl, j) => ({
+    label: `${B.label}: ${bl}`,
+    data: A.levels.map(al => { const v = cellVals(al, bl); return v.length >= COMBO_MIN_N ? avg(v) : null; }),
+    backgroundColor: COMBO_COLORS[j % COMBO_COLORS.length], borderRadius: 3, borderWidth: 0,
+  }));
+  const ctx = document.getElementById('chart-combo').getContext('2d');
+  charts['combo'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: A.levels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { font: { size: 11 }, boxWidth: 10 } },
+        tooltip: { callbacks: { label: c => {
+          const n = cellVals(A.levels[c.dataIndex], bLevels[c.datasetIndex]).length;
+          return c.raw == null ? `${c.dataset.label}: hidden (n=${n})` : `${c.dataset.label}: avg ${c.raw.toFixed(1)} (n=${n})`;
+        } } },
+      },
+      scales: {
+        x: { ticks: tickOpts(), grid: gridOpts() },
+        y: { min: 0, max: 10, ticks: tickOpts(), grid: gridOpts() }
+      }
+    }
+  });
+
+  const lines = bLevels.map(bl => {
+    const first = cellVals(A.levels[0], bl), second = cellVals(A.levels[1], bl);
+    if (first.length < COMBO_MIN_N || second.length < COMBO_MIN_N) return null;
+    const diff = avg(first) - avg(second);
+    return { diff, text: `${bl}: ${A.levels[0]} − ${A.levels[1]} = ${diff > 0 ? '+' : ''}${diff.toFixed(1)} (n=${first.length} vs ${second.length})` };
+  }).filter(Boolean);
+
+  let verdict;
+  if (!lines.length) verdict = `No ${B.label.toLowerCase()} level has at least ${COMBO_MIN_N} days in both ${A.label.toLowerCase()} groups yet.`;
+  else if (lines.some(l => l.diff > 0) && lines.some(l => l.diff < 0)) verdict = `The difference flips direction across ${B.label.toLowerCase()} levels, which may be an interaction. Cells are small, so treat this as a lead to check, not a finding.`;
+  else verdict = `The difference points the same way at every ${B.label.toLowerCase()} level shown.`;
+  document.getElementById('insight-combo').innerHTML =
+    `<strong>${A.label} × ${B.label}</strong>` + lines.map(l => `<br>${l.text}`).join('') + `<br>${verdict}`;
+}
+function renderComboCatNum(cdef, ndef, pts) {
+  const levels = cdef.levels.filter(l => pts.some(p => p.c === l));
+  const groups = levels.map((l, i) => {
+    const g = pts.filter(p => p.c === l);
+    return { label: l, color: COMBO_COLORS[i % COMBO_COLORS.length], pairs: g.map(p => ({ x: p.v, y: p.itch })), itch: g.map(p => p.itch) };
+  });
+  const maxX = Math.ceil(Math.max(...pts.map(p => p.v))) || 1;
+  const ctx = document.getElementById('chart-combo').getContext('2d');
+  charts['combo'] = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets: groups.map(g => ({ label: g.label, data: g.pairs, backgroundColor: g.color, pointRadius: 5, pointHoverRadius: 7 })) },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { font: { size: 11 }, boxWidth: 10 } },
+        tooltip: { callbacks: { label: c => `${ndef.label} ${c.raw.x} → itch ${c.raw.y}` } },
+      },
+      scales: {
+        x: { min: 0, max: maxX, ticks: { ...tickOpts(), stepSize: 1 }, grid: gridOpts() },
+        y: { min: 0, max: 10, ticks: tickOpts(), grid: gridOpts() }
+      }
+    }
+  });
+
+  const rs = groups.map(g => ({ label: g.label, n: g.pairs.length, r: pearson(g.pairs), itchAvg: avg(g.itch) }));
+  document.getElementById('stats-combo').textContent =
+    rs.map(x => `${x.label}: n=${x.n}, avg itch ${x.itchAvg.toFixed(1)}, r=${x.r === null ? '—' : x.r.toFixed(2)}`).join(' · ');
+
+  const usable = rs.filter(x => x.r !== null);
+  let verdict;
+  if (usable.length < 2) verdict = `Need at least two ${cdef.label.toLowerCase()} groups with ${COMBO_MIN_N}+ days to compare relationships.`;
+  else {
+    const rv = usable.map(x => x.r);
+    const spread = Math.max(...rv) - Math.min(...rv);
+    verdict = spread >= 0.3
+      ? `The ${ndef.label.toLowerCase()}–itch relationship differs across ${cdef.label.toLowerCase()} groups (r spread ${spread.toFixed(2)}). Small groups, so treat this as a lead.`
+      : `The ${ndef.label.toLowerCase()}–itch relationship looks similar across ${cdef.label.toLowerCase()} groups.`;
+  }
+  document.getElementById('insight-combo').innerHTML =
+    `<strong>${ndef.label} vs itch, split by ${cdef.label}</strong>` +
+    rs.map(x => `<br>${x.label}: ${x.r === null ? 'not enough data' : `r = ${x.r.toFixed(2)}`} (n=${x.n})`).join('') +
+    `<br>${verdict}` + smallSampleNote(...groups.map(g => g.pairs));
 }
 
 // ── VIEW 4: Factors ────────────────────────────────────

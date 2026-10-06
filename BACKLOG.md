@@ -27,8 +27,9 @@ Fields already captured per entry but never surfaced in any chart or callout:
       small samples, "6.2 vs 3.1" can read as a stronger signal than it is. Added
       `n=` and min–max range to the alcohol, Vanicream, and histamine callouts, plus a
       "small sample" caution note (n<5) across those and the four cycle-phase callouts.
-- [ ] Multi-factor combinations — e.g. alcohol-during-luteal vs alcohol-during-follicular.
-      Factors are currently only ever evaluated in isolation.
+- [x] Multi-factor combinations — Combinations card on the Factors tab. Pick any two
+      factors: categorical × categorical shows grouped bars with n per cell (cells under
+      n=3 hidden); categorical × numeric shows a scatter split by group with r per group.
 - [x] Justin home/away/in-NY correlation — new "Avg itch: Justin home vs away" bar
       chart + insight callout on the Timeline tab, parsing the sheet's new `Justin?`
       column (Yes/N/In NY) added to track whether Stefanie being with vs. away from
