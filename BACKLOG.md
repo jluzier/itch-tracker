@@ -5,6 +5,18 @@ in priority order within each group. Check items off as they ship; convert an it
 GitHub issue when work actually starts (reference the issue number back here) rather
 than opening issues for the whole backlog up front.
 
+## Next Up
+
+Cross-group priority order for the open items below:
+
+1. Lagged-effect view (Data & Insights) — biggest analytical gap; cheap to build on
+   the existing comparison/callout code.
+2. Treatments tried (Clinical) — needs a new sheet column first, so start capturing
+   data early.
+3. CSV/JSON export (Clinical) — small and self-contained.
+4. Colorblind-safe severity (UX) — mostly limited to the timeline chart points.
+5. PCP visit summary (Clinical) — needs layout decisions; benefits from 1 and 2.
+
 ## Privacy / Security
 
 - [x] ~~Stop exposing the live data feed in a public repo~~ — **won't fix.** Reviewed
@@ -38,12 +50,12 @@ than opening issues for the whole backlog up front.
       sparkline, factor table with n, itch locations, and severe-day note excerpts.
       Print CSS limits output to one letter page. Data is cut off before the most recent
       14+ day logging gap.
-- [ ] Visit summary: PCP version — broader overall-burden framing (sleep, stress,
-      cycle) for a primary care visit, vs. the dermatology-focused layout.
 - [ ] Visit summary: treatments tried — add a field for medications and topical
       treatments so the summary can show what was used during each period.
 - [ ] CSV/JSON export of the processed dataset, for handing to a provider directly
       rather than linking the raw sheet.
+- [ ] Visit summary: PCP version — broader overall-burden framing (sleep, stress,
+      cycle) for a primary care visit, vs. the dermatology-focused layout.
 
 ## Data Quality / Robustness
 
@@ -62,8 +74,9 @@ than opening issues for the whole backlog up front.
 - [x] Date range filter on the Timeline chart and the Diet log table — added
       7d/30d/90d/All-time pill filters to each independently (Timeline's streak/gap
       stats stay computed over full history regardless of the selected window).
-- [ ] Colorblind-safe severity encoding — severity is currently color-only
-      (red/amber/teal); add a text or shape fallback.
+- [ ] Colorblind-safe severity encoding — most places already pair the color with the
+      number; the main color-only spot is the point colors on the itch level over
+      time chart. Add a shape or tooltip fallback there.
 - [x] Dark mode — toggle button in the header, persisted in `localStorage`, defaulting
       to the OS `prefers-color-scheme` on first visit. Accent colors (teal/amber/red/
       blue/navy) stay constant across themes; only surfaces, text, and chart grid/tick
