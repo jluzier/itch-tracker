@@ -257,6 +257,36 @@
   }
   .cycle-editor-excluded { margin-top: 12px; }
 
+  /* ── Cycle heatmap ──
+     Plain CSS grid (no Chart.js) so the same markup prints on the Visit Summary.
+     Cell fill is a single-hue ramp: surface → red by itch level; the number is
+     always printed in the cell so severity never relies on color alone. */
+  .hm-scroll { overflow-x: auto; }
+  .hm { display: grid; gap: 2px; font-family: var(--mono); font-size: 9px; min-width: 560px; }
+  .hm-cell {
+    height: 22px; border-radius: 3px; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-pri);
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .hm-cell.hm-hi { color: #fff; }
+  .hm-cell.hm-empty { border: 1px dashed var(--border); }
+  .hm-cell.hm-vx::after {
+    content: ''; position: absolute; top: 2px; right: 2px;
+    width: 4px; height: 4px; border-radius: 50%; background: currentColor;
+  }
+  .hm-head { font-size: 9px; color: var(--text-ter); text-align: center; padding: 2px 0; border-radius: 3px; }
+  .hm-head.hm-pms { background: var(--amber-lt); color: var(--amber); }
+  .hm-label { font-size: 10px; color: var(--text-sec); align-self: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px; }
+  .hm-label.hm-flag { color: var(--text-ter); font-style: italic; }
+  .hm-cell.hm-dim:not(.hm-empty) { opacity: 0.55; }
+  .hm-mark-period { box-shadow: -2px 0 0 0 var(--red); }
+  .hm-mark-luteal { box-shadow: -2px 0 0 0 var(--text-ter); }
+  .hm-key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 10px; font-size: 11px; color: var(--text-sec); }
+  .hm-key .hm-ramp { display: inline-flex; gap: 1px; vertical-align: middle; margin: 0 4px; }
+  .hm-key .hm-ramp span { width: 10px; height: 10px; border-radius: 2px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .hm-key .hm-sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+
   /* ── Main layout ── */
   main { padding: 28px 32px; max-width: 1200px; margin: 0 auto; }
 
@@ -576,6 +606,15 @@
     <div class="callout callout-amber">
       <div id="cycle-start-banner"></div>
     </div>
+    <div id="cycle-all" style="display:none;">
+      <div class="card">
+        <div class="card-title">Itch across all cycles <span style="font-size:11px;color:var(--text-ter);">one row per cycle · hover a cell for details</span></div>
+        <div class="range-filter" id="cycle-align-picker"></div>
+        <div class="hm-scroll"><div id="cycle-heatmap"></div></div>
+        <div class="hm-key" id="cycle-heatmap-key"></div>
+      </div>
+    </div>
+    <div id="cycle-single">
     <div class="stat-strip" id="strip-cycle"></div>
     <div class="card">
       <div class="card-title">Itch level by estimated cycle day</div>
@@ -606,6 +645,7 @@
           <div id="insight-luteal"></div>
         </div>
       </div>
+    </div>
     </div>
   </div>
 
@@ -813,7 +853,7 @@ function refreshCycleStarts() {
   cycleStarts = computeCycleStarts(allData);
   cycleStartDetected = cycleStarts.length > 0;
   if (cycleStartDetected) CYCLE_START = cycleStarts[cycleStarts.length - 1];
-  viewingCycleOffset = 0;
+  if (viewingCycleOffset !== 'all') viewingCycleOffset = 0;
   buildCycle();
 }
 function toggleCycleEditor() {
@@ -955,6 +995,101 @@ function buildCycles(data, starts) {
 }
 function cycleFlagNote(c) {
   return `Flagged: ${c.flags.join('; ')}. Excluded from cross-cycle stats — if a period was missed, add its start via "Edit cycle starts".`;
+}
+
+// ── Cycle heatmap ──────────────────────────────────────
+// 'before' lines every period start up in the same column, showing the 21 days
+// leading into it and the first 7 days of the period. Luteal length is fairly
+// fixed (~14 days) while follicular length varies, so this aligns premenstrual
+// flares across cycles of different lengths better than counting from day 1.
+// 'start' is the conventional view: one row per cycle, cycle day 1 onward.
+const HM_BEFORE = 21, HM_AFTER = 7, HM_FWD_MAX = CYCLE_MAX_LEN;
+let cycleAlign = 'before';
+function heatFill(itch, base) {
+  return `color-mix(in oklab, var(--red) ${Math.round(8 + itch * 8.5)}%, ${base})`;
+}
+function dayIndex(data) {
+  const byDay = new Map();
+  data.forEach(r => {
+    const k = toISODate(r.date);
+    const e = byDay.get(k) || { vals: [], locs: [], valtrex: false };
+    e.vals.push(r.itch);
+    if (r.location) e.locs.push(r.location.trim());
+    e.valtrex = e.valtrex || r.valtrex;
+    byDay.set(k, e);
+  });
+  return byDay;
+}
+function hmCell(day, date, dayText, extraCls, base) {
+  if (!day) return `<div class="hm-cell hm-empty ${extraCls}" title="${fmtShort(date)} · ${dayText} · not logged"></div>`;
+  const v = Math.round(avg(day.vals) * 10) / 10;
+  const tip = `${fmtShort(date)} · ${dayText} · itch ${v}${day.locs.length ? ' · ' + day.locs.join('; ') : ''}${day.valtrex ? ' · Valtrex taken' : ''}`;
+  return `<div class="hm-cell ${v >= 6 ? 'hm-hi' : ''} ${day.valtrex ? 'hm-vx' : ''} ${extraCls}" style="background:${heatFill(v, base)}" title="${esc(tip)}">${Math.round(v)}</div>`;
+}
+function cycleHeatmapHtml(data, cycles, align, base = 'var(--surface)') {
+  const byDay = dayIndex(data);
+  const lastLog = data.length ? startOfDay(data[data.length - 1].date) : null;
+  let cols, rows;
+  if (align === 'before') {
+    // Column offsets: -21..-1 (days before the period), then 1..7 (period days).
+    cols = [...Array(HM_BEFORE).keys()].map(i => i - HM_BEFORE).concat([...Array(HM_AFTER).keys()].map(i => i + 1));
+    rows = cycles.map((c, i) => {
+      const prev = cycles[i - 1];
+      const flagged = prev && prev.flags.length;
+      return {
+        label: `Period ${fmtShort(c.start)}`,
+        flagTip: flagged ? `Cycle before this period is flagged: ${prev.flags.join('; ')}` : '',
+        cells: cols.map(off => {
+          const date = addDays(c.start, off < 0 ? off : off - 1);
+          if (lastLog && date > lastLog) return '<div></div>';
+          const mark = off === 1 ? 'hm-mark-period' : off === -14 ? 'hm-mark-luteal' : '';
+          const text = off < 0 ? `${-off} day${off === -1 ? '' : 's'} before period` : `period day ${off}`;
+          return hmCell(byDay.get(toISODate(date)), date, text, `${mark} ${flagged ? 'hm-dim' : ''}`, base);
+        }).join(''),
+      };
+    });
+  } else {
+    const maxLen = Math.min(HM_FWD_MAX, Math.max(...cycles.map(c => c.elapsed)));
+    cols = [...Array(maxLen).keys()].map(i => i + 1);
+    rows = cycles.map(c => ({
+      label: `${fmtShort(c.start)} · ${c.complete ? c.length + 'd' : 'ongoing'}`,
+      flagTip: c.flags.length ? `Flagged: ${c.flags.join('; ')}` : '',
+      cells: cols.map(cd => {
+        if (cd > c.elapsed) return '<div></div>';
+        const date = addDays(c.start, cd - 1);
+        return hmCell(byDay.get(toISODate(date)), date, `cycle day ${cd}`, `${cd === 6 ? 'hm-mark-luteal' : ''} ${c.flags.length ? 'hm-dim' : ''}`, base);
+      }).join(''),
+    }));
+  }
+  const showHead = align === 'before'
+    ? off => [-21, -14, -7, -1, 1, 7].includes(off) ? (off > 0 ? `+${off}` : off) : ''
+    : cd => cd === 1 || cd % 5 === 0 ? cd : '';
+  const head = cols.map(c => `<div class="hm-head ${align === 'before' && c < 0 && c >= -7 ? 'hm-pms' : ''}">${showHead(c)}</div>`).join('');
+  const body = rows.map(r => `<div class="hm-label ${r.flagTip ? 'hm-flag' : ''}" ${r.flagTip ? `title="${esc(r.flagTip)}"` : ''}>${r.label}${r.flagTip ? ' †' : ''}</div>${r.cells}`).join('');
+  return `<div class="hm" style="grid-template-columns: 96px repeat(${cols.length}, minmax(0, 1fr));"><div></div>${head}${body}</div>`;
+}
+function cycleHeatmapKey(align, base = 'var(--surface)') {
+  const ramp = [0, 2, 4, 6, 8, 10].map(v => `<span style="background:${heatFill(v, base)}"></span>`).join('');
+  const marks = align === 'before'
+    ? `<span><span class="hm-sw" style="background:var(--red)"></span>period day 1</span>
+       <span><span class="hm-sw" style="background:var(--amber-lt);border:1px solid var(--amber)"></span>premenstrual week (−7 to −1)</span>
+       <span><span class="hm-sw" style="background:var(--text-ter)"></span>−14: estimated luteal start</span>`
+    : `<span><span class="hm-sw" style="background:var(--text-ter)"></span>day 6: end of menses window</span>`;
+  return `<span>Itch 0<span class="hm-ramp">${ramp}</span>10</span>
+    <span>● Valtrex taken</span>
+    <span><span class="hm-sw" style="border:1px dashed var(--text-ter)"></span>not logged</span>
+    ${marks}
+    <span>† flagged cycle (dimmed)</span>`;
+}
+function setCycleAlign(v) { cycleAlign = v; buildCycleAll(); }
+function buildCycleAll() {
+  const cycles = buildCycles(allData, cycleStarts);
+  document.getElementById('cycle-align-picker').innerHTML = [
+    { val: 'before', label: 'Days before next period' },
+    { val: 'start', label: 'From period start' },
+  ].map(o => `<button class="pill-tab ${cycleAlign === o.val ? 'active' : ''}" onclick="setCycleAlign('${o.val}')">${o.label}</button>`).join('');
+  document.getElementById('cycle-heatmap').innerHTML = cycleHeatmapHtml(allData, cycles, cycleAlign);
+  document.getElementById('cycle-heatmap-key').innerHTML = cycleHeatmapKey(cycleAlign);
 }
 
 // Cross-tab glance stats — always computed over full history, rendered
@@ -1703,12 +1838,25 @@ function buildCycle() {
   document.getElementById('cycle-subnav').innerHTML = `
     <button class="pill-tab ${viewingCycleOffset===0?'active':''}" onclick="switchCycle(0)">Current Cycle</button>
     <button class="pill-tab ${viewingCycleOffset===1?'active':''}" onclick="switchCycle(1)" ${hasPrevious?'':'disabled'}>Last Cycle</button>
+    <button class="pill-tab ${viewingCycleOffset==='all'?'active':''}" onclick="switchCycle('all')" ${cycleStarts.length?'':'disabled'}>All Cycles</button>
     <button class="pill-tab pill-tab-ghost ${cycleEditorOpen?'active':''}" onclick="toggleCycleEditor()">⚙ Edit cycle starts</button>
   `;
   renderCycleEditor();
 
-  const range = getCycleRange(viewingCycleOffset);
   const banner = document.getElementById('cycle-start-banner');
+  const showAll = viewingCycleOffset === 'all' && cycleStarts.length;
+  document.getElementById('cycle-all').style.display = showAll ? 'block' : 'none';
+  document.getElementById('cycle-single').style.display = showAll ? 'none' : 'block';
+  if (showAll) {
+    const cycles = buildCycles(allData, cycleStarts);
+    const validN = cycles.filter(c => c.valid).length;
+    const flagged = cycles.filter(c => c.flags.length);
+    banner.innerHTML = `<strong>All cycles: ${cycles.length} period start${cycles.length === 1 ? '' : 's'} since ${fmtLong(cycles[0].start)}, ${validN} complete cycle${validN === 1 ? '' : 's'} usable for comparison.</strong> Each row is one cycle. "Days before next period" lines rows up on each period start so premenstrual days sit in the same columns regardless of cycle length.${flagged.map(c => `<span class="small-sample-note">${fmtShort(c.start)} cycle — ${cycleFlagNote(c)}</span>`).join('')}`;
+    buildCycleAll();
+    return;
+  }
+
+  const range = getCycleRange(viewingCycleOffset);
 
   if (!range) {
     banner.innerHTML = `<strong>No cycle start detected yet.</strong> Log "Menstrual Cycle: Yes" for a few consecutive days on the sheet to let cycle-day estimates auto-calculate, or add one manually via "Edit cycle starts" above.`;

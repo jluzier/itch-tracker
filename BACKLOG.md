@@ -26,8 +26,11 @@ Built only on existing sheet columns — no form changes.
       calendar-day math and flags any cycle over 35 days or containing a 7+ day logging
       gap (e.g. the Jul 25 → Oct 8 "75-day cycle" hiding the Aug–Sep gap). Flagged
       cycles show the reason on the Cycle banner and are excluded from cross-cycle stats.
-- [ ] All-cycles heatmap — one row per period, aligned by days before the next period
-      (or from period start), with Valtrex days marked.
+- [x] All-cycles heatmap — new "All Cycles" view on the Cycle tab: one row per cycle,
+      cells colored by itch with the number printed, Valtrex days dotted, unlogged days
+      dashed. Toggle between "Days before next period" (−21…+7 around each period start,
+      premenstrual week and −14 marked) and "From period start" (cycle day 1–35).
+      Flagged cycles are dimmed with a † and the reason in the tooltip.
 - [ ] Per-cycle table + pooled stats — menses / early-follicular / luteal /
       premenstrual averages with n, flare onset and settle day per cycle.
 - [ ] Expected flare window — predict the next period and flare from the median cycle
