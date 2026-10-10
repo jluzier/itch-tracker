@@ -14,9 +14,6 @@ than opening issues for the whole backlog up front.
 
 ## Data & Insights
 
-Fields already captured per entry but never surfaced in any chart or callout:
-`stress`, `sleep`, `hydration`, `tempHi`, `humidity`.
-
 - [x] Surface stress / sleep / hydration / weather correlations against itch level —
       new Factors tab: multi-select toggles for stress/sleep/hydration, one scatter per
       selected factor with n and Pearson r, plus separate temp and humidity charts.
@@ -54,9 +51,10 @@ Fields already captured per entry but never surfaced in any chart or callout:
       Mapping tab to exclude a bad auto-detected date or add a missed one, stored as a
       diff in localStorage on top of `detectCycleStarts()` (always resettable).
       Closed as [#2](https://github.com/jluzier/itch-tracker/issues/2).
-- [x] Logging-gap awareness — a current-streak stat and a logging-gaps stat (later
-      promoted to the global header strip, see below) plus a Timeline callout listing
-      the largest gaps by date range. Closed as
+- [x] Logging-gap awareness — a current-streak stat (later promoted to the header,
+      see below) plus a Timeline callout listing the largest gaps by date range. A
+      logging-gaps stat also shipped but was later dropped from the header as not
+      pulling its weight. Closed as
       [#3](https://github.com/jluzier/itch-tracker/issues/3).
 
 ## UX
@@ -70,10 +68,10 @@ Fields already captured per entry but never surfaced in any chart or callout:
       to the OS `prefers-color-scheme` on first visit. Accent colors (teal/amber/red/
       blue/navy) stay constant across themes; only surfaces, text, and chart grid/tick
       colors invert.
-- [x] Cross-tab glance stats in the header — Current streak, Logging gaps, and Last
-      log itch level promoted from the Timeline-only stat strip into a persistent row
-      of compact chips between the header and the nav tabs, visible regardless of
-      which tab is active. First pass reused the full `.stat` card component and
-      looked too tall for the space; replaced with small pill-style chips instead.
-      Removed the now-duplicate tiles from Timeline's strip and the old header text
-      line they replaced.
+- [x] Cross-tab glance stats in the header — Last log itch level and Current streak
+      shown as compact chips directly under the "Itch Tracker" title, visible
+      regardless of which tab is active ("Last fetched" moved to the right-side
+      controls to make room). First pass reused the full `.stat` card component and
+      looked too tall; replaced with small pill-style chips. A Logging gaps chip was
+      also tried and later dropped. Removed the now-duplicate tiles from Timeline's
+      strip and the old header text line they replaced.
