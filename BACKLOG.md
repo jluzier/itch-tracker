@@ -71,7 +71,9 @@ Built only on existing sheet columns — no form changes.
 - [x] Justin home/away/in-NY correlation — new "Avg itch: Justin home vs away" bar
       chart + insight callout on the Timeline tab, parsing the sheet's new `Justin?`
       column (Yes/N/In NY) added to track whether Stefanie being with vs. away from
-      Justin correlates with itch level.
+      Justin correlates with itch level. The Timeline chart and callout were later
+      removed; Justin remains a factor in the Combinations card and in the timeline
+      point tooltips.
 
 ## Clinical / Doctor-Visit Use
 
@@ -102,7 +104,8 @@ Built only on existing sheet columns — no form changes.
 
 - [x] Date range filter on the Timeline chart and the Diet log table — added
       7d/30d/90d/All-time pill filters to each independently (Timeline's streak/gap
-      stats stay computed over full history regardless of the selected window).
+      stats stay computed over full history regardless of the selected window). The
+      Timeline now defaults to 30d; the Diet log still defaults to All time.
 - [ ] Colorblind-safe severity encoding — most places already pair the color with the
       number; the main color-only spot is the point colors on the itch level over
       time chart. Add a shape or tooltip fallback there.
