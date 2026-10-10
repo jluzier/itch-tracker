@@ -36,8 +36,11 @@ Built only on existing sheet columns — no form changes.
       (last 7d) averages with n, plus flare onset (first itch ≥5 after day 5) and the
       period day itch settled to ≤2. A pooled callout summarizes complete, unflagged
       cycles only.
-- [ ] Expected flare window — predict the next period and flare from the median cycle
-      length, and score the previous prediction once the next period is logged.
+- [x] Expected flare window — blue callout at the top of the Cycle tab: next period =
+      last start + median complete-cycle length; window opens at the earliest observed
+      flare onset and runs to period day 4. Past predictions are scored (period days
+      early/late, flare onset vs. window) using only data available at the time; warns
+      when no period is logged a week past the expected date.
 - [ ] Visit Summary cycle section — backward-aligned heatmap and per-cycle table on
       the printable page.
 

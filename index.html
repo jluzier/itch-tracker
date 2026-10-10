@@ -606,6 +606,9 @@
       <div class="card-title">Cycle start overrides</div>
       <div id="cycle-editor-body"></div>
     </div>
+    <div class="callout callout-blue">
+      <div id="cycle-forecast"></div>
+    </div>
     <div class="callout callout-amber">
       <div id="cycle-start-banner"></div>
     </div>
@@ -1147,6 +1150,62 @@ function pooledCycleText(cycles) {
     ? ` Itch settled to ≤${QUIET_ITCH} by period day ${list(settled)}${settled.length > 1 ? ', respectively' : ''}.`
     : '';
   return `<strong>Across ${valid.length} complete cycle${valid.length === 1 ? '' : 's'}</strong> Premenstrual week avg ${statsFmt(pms)} vs early follicular (days 6–10) ${statsFmt(early)}; menses (days 1–5) ${statsFmt(menses)}.${onsetTxt}${settledTxt}${smallSampleNote(pms, early, menses)}`;
+}
+// ── Forecast ───────────────────────────────────────────
+// Prediction made at the start of cycle k, using only complete unflagged
+// cycles before it: next period = start + median length; flare window opens
+// at the earliest observed onset (days before period) and runs to period day 4.
+function median(arr) {
+  const s = [...arr].sort((a, b) => a - b), m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+function forecastAt(cycles, k) {
+  const prior = cycles.slice(0, k).map((c, i) => ({ c, w: cycleWindows(c, cycles[i + 1]) })).filter(x => x.c.valid);
+  if (!prior.length) return null;
+  const lengths = prior.map(x => x.c.length);
+  const onsets = prior.map(x => x.w.onset && x.w.onset.dbn).filter(v => v != null);
+  const lead = onsets.length ? Math.max(...onsets) : 7;
+  const expected = addDays(cycles[k].start, Math.round(median(lengths)));
+  return {
+    n: prior.length, minLen: Math.min(...lengths), maxLen: Math.max(...lengths),
+    expected, windowStart: addDays(expected, -lead), windowEnd: addDays(expected, 3),
+  };
+}
+function signedDays(n, early, late) {
+  return n === 0 ? 'on the day' : `${Math.abs(n)} day${Math.abs(n) === 1 ? '' : 's'} ${n < 0 ? early : late}`;
+}
+function cycleForecastHtml(cycles) {
+  if (!cycles.length) return '';
+  const k = cycles.length - 1;
+  const f = forecastAt(cycles, k);
+  let html;
+  if (!f) {
+    html = `<strong>Expected flare window</strong> Needs at least one complete, unflagged cycle before the current one.`;
+  } else {
+    const range = f.minLen === f.maxLen ? `${f.minLen}-day` : `${f.minLen}–${f.maxLen} day`;
+    html = `<strong>Expected flare window: ~${fmtShort(f.windowStart)} – ${fmtShort(f.windowEnd)} (estimated)</strong> Next period expected ~${fmtShort(f.expected)}, based on ${f.n} complete ${range} cycle${f.n === 1 ? '' : 's'}. The window opens at the earliest flare onset seen so far and runs to period day 4.`;
+    const lastLog = allData.length ? startOfDay(allData[allData.length - 1].date) : null;
+    if (lastLog && calDays(f.expected, lastLog) > 7) {
+      html += `<span class="small-sample-note">No period start logged within a week of the expected date — if one was missed, add it via "Edit cycle starts".</span>`;
+    }
+  }
+  // Score every past prediction that can be scored: the forecast made at cycle i's
+  // start against cycle i's actual end (period date) and actual flare onset.
+  const scored = cycles.slice(0, k).map((c, i) => {
+    const p = forecastAt(cycles, i);
+    if (!p || !c.valid) return null;
+    const w = cycleWindows(c, cycles[i + 1]);
+    const periodErr = calDays(p.expected, c.next);
+    const onsetTxt = w.onset
+      ? `flare began ${fmtShort(w.onset.date)} (${signedDays(calDays(p.windowStart, w.onset.date), 'before', 'after')} the window opened)`
+      : `no flare ≥${FLARE_ITCH} logged`;
+    return `${fmtShort(c.next)} period: predicted ~${fmtShort(p.expected)}, arrived ${signedDays(periodErr, 'early', 'late')}; ${onsetTxt}.`;
+  }).filter(Boolean);
+  const unscored = k > 0 && !cycles[k - 1].valid ? ` The ${fmtShort(cycles[k - 1].start)} cycle is flagged, so its prediction can't be scored.` : '';
+  if (scored.length || unscored) {
+    html += `<span class="small-sample-note">Past predictions — ${scored.join(' ') || 'none scoreable yet.'}${unscored}</span>`;
+  }
+  return html;
 }
 function setCycleAlign(v) { cycleAlign = v; buildCycleAll(); }
 function buildCycleAll() {
@@ -1911,6 +1970,10 @@ function buildCycle() {
     <button class="pill-tab pill-tab-ghost ${cycleEditorOpen?'active':''}" onclick="toggleCycleEditor()">⚙ Edit cycle starts</button>
   `;
   renderCycleEditor();
+
+  const forecastEl = document.getElementById('cycle-forecast');
+  forecastEl.innerHTML = cycleForecastHtml(buildCycles(allData, cycleStarts));
+  forecastEl.parentElement.style.display = forecastEl.innerHTML ? 'block' : 'none';
 
   const banner = document.getElementById('cycle-start-banner');
   const showAll = viewingCycleOffset === 'all' && cycleStarts.length;
