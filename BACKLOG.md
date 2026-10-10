@@ -41,8 +41,10 @@ Built only on existing sheet columns — no form changes.
       flare onset and runs to period day 4. Past predictions are scored (period days
       early/late, flare onset vs. window) using only data available at the time; warns
       when no period is logged a week past the expected date.
-- [ ] Visit Summary cycle section — backward-aligned heatmap and per-cycle table on
-      the printable page.
+- [x] Visit Summary cycle section — backward-aligned heatmap, pooled cycle line, and
+      per-cycle table on the printable page, replacing the old forward-counted "Cycle
+      phase" factor row. Tightened spacing elsewhere (sparkline, table rows, top 4
+      itch locations, 120-char note excerpts) to keep it on one letter page.
 
 ## Privacy / Security
 
