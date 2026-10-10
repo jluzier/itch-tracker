@@ -31,8 +31,11 @@ Built only on existing sheet columns — no form changes.
       dashed. Toggle between "Days before next period" (−21…+7 around each period start,
       premenstrual week and −14 marked) and "From period start" (cycle day 1–35).
       Flagged cycles are dimmed with a † and the reason in the tooltip.
-- [ ] Per-cycle table + pooled stats — menses / early-follicular / luteal /
-      premenstrual averages with n, flare onset and settle day per cycle.
+- [x] Per-cycle table + pooled stats — "Cycle by cycle" table under the heatmap with
+      menses (d1–5), early follicular (d6–10), luteal (last 14d) and premenstrual
+      (last 7d) averages with n, plus flare onset (first itch ≥5 after day 5) and the
+      period day itch settled to ≤2. A pooled callout summarizes complete, unflagged
+      cycles only.
 - [ ] Expected flare window — predict the next period and flare from the median cycle
       length, and score the previous prediction once the next period is logged.
 - [ ] Visit Summary cycle section — backward-aligned heatmap and per-cycle table on

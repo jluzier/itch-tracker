@@ -285,6 +285,9 @@
   .hm-key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 10px; font-size: 11px; color: var(--text-sec); }
   .hm-key .hm-ramp { display: inline-flex; gap: 1px; vertical-align: middle; margin: 0 4px; }
   .hm-key .hm-ramp span { width: 10px; height: 10px; border-radius: 2px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .cyc-table { margin-top: 0; min-width: 560px; }
+  .cyc-table th { vertical-align: bottom; }
+  .cyc-table tr.cyc-flag td { color: var(--text-ter); }
   .hm-key .hm-sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
 
   /* ── Main layout ── */
@@ -612,6 +615,13 @@
         <div class="range-filter" id="cycle-align-picker"></div>
         <div class="hm-scroll"><div id="cycle-heatmap"></div></div>
         <div class="hm-key" id="cycle-heatmap-key"></div>
+      </div>
+      <div class="callout callout-amber">
+        <div id="insight-cycle-pooled"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Cycle by cycle <span style="font-size:11px;color:var(--text-ter);">avg itch per window · † flagged, excluded from the callout above</span></div>
+        <div class="hm-scroll" id="cycle-table"></div>
       </div>
     </div>
     <div id="cycle-single">
@@ -1081,6 +1091,63 @@ function cycleHeatmapKey(align, base = 'var(--surface)') {
     ${marks}
     <span>† flagged cycle (dimmed)</span>`;
 }
+// ── Per-cycle windows ──────────────────────────────────
+// Windows are defined so they never overlap: menses = cycle days 1–5, early
+// follicular = days 6–10 but stopping where the luteal window (last 14 days
+// before the next period) begins, premenstrual = last 7 days.
+const FLARE_ITCH = 5, QUIET_ITCH = 2;
+function cycleWindows(c, nextCycle) {
+  const vals = pred => c.rows.filter(pred).map(r => r.itch);
+  const onsetRow = c.rows.find(r => r.cd >= 6 && r.itch >= FLARE_ITCH);
+  const settledRow = nextCycle ? nextCycle.rows.find(r => r.cd <= 10 && r.itch <= QUIET_ITCH) : null;
+  return {
+    menses: vals(r => r.cd <= 5),
+    earlyFoll: vals(r => r.cd >= 6 && r.cd <= 10 && (r.dbn === null || r.dbn > 14)),
+    luteal: c.complete ? vals(r => r.dbn >= 1 && r.dbn <= 14) : [],
+    pms: c.complete ? vals(r => r.dbn >= 1 && r.dbn <= 7) : [],
+    onset: onsetRow ? { cd: onsetRow.cd, dbn: onsetRow.dbn, date: onsetRow.date } : null,
+    settledCd: settledRow ? settledRow.cd : null,
+  };
+}
+function windowCell(arr) {
+  return arr.length ? `${avg(arr).toFixed(1)} <span class="sum-note">n=${arr.length}</span>` : '—';
+}
+function cycleTableHtml(cycles) {
+  const body = cycles.map((c, i) => {
+    const w = cycleWindows(c, cycles[i + 1]);
+    const onset = !w.onset ? '—' : w.onset.dbn !== null ? `${w.onset.dbn}d before period` : `day ${w.onset.cd}`;
+    const settled = !c.complete ? '—' : w.settledCd ? `period day ${w.settledCd}` : 'not yet';
+    const flag = c.flags.length ? ` <span title="${esc(c.flags.join('; '))}">†</span>` : '';
+    return `<tr class="${c.flags.length ? 'cyc-flag' : ''}">
+      <td>${fmtShort(c.start)}${flag}</td>
+      <td>${c.complete ? c.length + 'd' : `ongoing (${c.elapsed}d)`}</td>
+      <td>${windowCell(w.menses)}</td><td>${windowCell(w.earlyFoll)}</td>
+      <td>${windowCell(w.luteal)}</td><td>${windowCell(w.pms)}</td>
+      <td>${onset}</td><td>${settled}</td>
+    </tr>`;
+  }).join('');
+  return `<table class="sum-table cyc-table">
+    <thead><tr><th>Cycle start</th><th>Length</th><th>Menses<br>d1–5</th><th>Early follicular<br>d6–10</th><th>Luteal<br>last 14d</th><th>Premenstrual<br>last 7d</th><th>Flare began<br>itch ≥${FLARE_ITCH}</th><th>Settled<br>itch ≤${QUIET_ITCH}</th></tr></thead>
+    <tbody>${body}</tbody>
+  </table>`;
+}
+// Pooled across complete, unflagged cycles only.
+function pooledCycleText(cycles) {
+  const valid = cycles.map((c, i) => ({ c, w: cycleWindows(c, cycles[i + 1]) })).filter(x => x.c.valid);
+  if (!valid.length) return `<strong>Across cycles</strong> No complete, unflagged cycles yet — log through at least one full period-to-period cycle.`;
+  const pool = key => valid.flatMap(x => x.w[key]);
+  const pms = pool('pms'), early = pool('earlyFoll'), menses = pool('menses');
+  const onsets = valid.map(x => x.w.onset && x.w.onset.dbn !== null ? x.w.onset.dbn : null);
+  const settled = valid.map(x => x.w.settledCd);
+  const list = arr => arr.length > 1 ? `${arr.slice(0, -1).join(', ')} and ${arr[arr.length - 1]}` : `${arr[0]}`;
+  const onsetTxt = onsets.every(v => v !== null)
+    ? ` Flare onset (first itch ≥${FLARE_ITCH} after day 5): ${list(onsets)} days before the period.`
+    : ` Itch reached ${FLARE_ITCH} or higher before the period in ${onsets.filter(v => v !== null).length} of ${valid.length} cycles.`;
+  const settledTxt = settled.every(v => v !== null)
+    ? ` Itch settled to ≤${QUIET_ITCH} by period day ${list(settled)}${settled.length > 1 ? ', respectively' : ''}.`
+    : '';
+  return `<strong>Across ${valid.length} complete cycle${valid.length === 1 ? '' : 's'}</strong> Premenstrual week avg ${statsFmt(pms)} vs early follicular (days 6–10) ${statsFmt(early)}; menses (days 1–5) ${statsFmt(menses)}.${onsetTxt}${settledTxt}${smallSampleNote(pms, early, menses)}`;
+}
 function setCycleAlign(v) { cycleAlign = v; buildCycleAll(); }
 function buildCycleAll() {
   const cycles = buildCycles(allData, cycleStarts);
@@ -1090,6 +1157,8 @@ function buildCycleAll() {
   ].map(o => `<button class="pill-tab ${cycleAlign === o.val ? 'active' : ''}" onclick="setCycleAlign('${o.val}')">${o.label}</button>`).join('');
   document.getElementById('cycle-heatmap').innerHTML = cycleHeatmapHtml(allData, cycles, cycleAlign);
   document.getElementById('cycle-heatmap-key').innerHTML = cycleHeatmapKey(cycleAlign);
+  document.getElementById('cycle-table').innerHTML = cycleTableHtml(cycles);
+  document.getElementById('insight-cycle-pooled').innerHTML = pooledCycleText(cycles);
 }
 
 // Cross-tab glance stats — always computed over full history, rendered
