@@ -9,13 +9,31 @@ than opening issues for the whole backlog up front.
 
 Cross-group priority order for the open items below:
 
-1. Lagged-effect view (Data & Insights) — biggest analytical gap; cheap to build on
-   the existing comparison/callout code.
-2. Treatments tried (Clinical) — needs a new sheet column first, so start capturing
-   data early.
-3. CSV/JSON export (Clinical) — small and self-contained.
-4. Colorblind-safe severity (UX) — mostly limited to the timeline chart points.
-5. PCP visit summary (Clinical) — needs layout decisions; benefits from 1 and 2.
+1. Cycle pattern items (below) — the leading theory is a menstrual-cycle link (APD);
+   these make the pattern checkable across cycles and shareable with doctors.
+2. CSV/JSON export (Clinical) — small and self-contained.
+3. Colorblind-safe severity (UX) — mostly limited to the timeline chart points.
+4. PCP visit summary (Clinical) — needs layout decisions.
+5. Lagged-effect view (Data & Insights) — deferred while the cycle theory is explored.
+6. Treatments tried (Clinical) — deferred: needs a new form field, and the form is not
+   changing for now.
+
+## Cycle Pattern
+
+Built only on existing sheet columns — no form changes.
+
+- [x] Cycle data quality — `buildCycles()` splits history into cycles using
+      calendar-day math and flags any cycle over 35 days or containing a 7+ day logging
+      gap (e.g. the Jul 25 → Oct 8 "75-day cycle" hiding the Aug–Sep gap). Flagged
+      cycles show the reason on the Cycle banner and are excluded from cross-cycle stats.
+- [ ] All-cycles heatmap — one row per period, aligned by days before the next period
+      (or from period start), with Valtrex days marked.
+- [ ] Per-cycle table + pooled stats — menses / early-follicular / luteal /
+      premenstrual averages with n, flare onset and settle day per cycle.
+- [ ] Expected flare window — predict the next period and flare from the median cycle
+      length, and score the previous prediction once the next period is logged.
+- [ ] Visit Summary cycle section — backward-aligned heatmap and per-cycle table on
+      the printable page.
 
 ## Privacy / Security
 

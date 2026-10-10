@@ -917,6 +917,46 @@ function computeCurrentStreak(data) {
   return streak;
 }
 
+// ── Cycle structure & data quality ─────────────────────
+// Cycle math uses calendar-day differences (local midnight), not raw timestamp
+// differences, so a 7pm period-start entry and a 6am entry the next morning are
+// one day apart rather than zero.
+const CYCLE_MAX_LEN = 35;   // longer than this almost always means a missed period start
+const CYCLE_GAP_FLAG = 7;   // a logging gap this long inside a cycle makes its averages unreliable
+function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function calDays(a, b) { return Math.round((startOfDay(b) - startOfDay(a)) / 86400000); }
+function addDays(d, n) { const x = startOfDay(d); x.setDate(x.getDate() + n); return x; }
+
+// One entry per cycle: rows tagged with cd (cycle day, 1-based) and dbn (days
+// before the next period start; null for the ongoing cycle), plus flags that
+// explain why a cycle shouldn't be trusted for pooled stats.
+function buildCycles(data, starts) {
+  const lastLog = data.length ? data[data.length - 1].date : null;
+  return starts.map((start, i) => {
+    const next = starts[i + 1] || null;
+    const rows = data
+      .filter(r => calDays(start, r.date) >= 0 && (!next || calDays(r.date, next) > 0))
+      .map(r => ({ ...r, cd: calDays(start, r.date) + 1, dbn: next ? calDays(r.date, next) : null }));
+    const length = next ? calDays(start, next) : null;
+    const elapsed = next ? length : (lastLog ? calDays(start, lastLog) + 1 : 0);
+    // Largest run of unlogged days inside the cycle window, including its edges.
+    const end = next ? addDays(next, -1) : startOfDay(lastLog || start);
+    const days = [...new Set(rows.map(r => r.cd))].sort((a, b) => a - b);
+    let maxGap = 0, gapFrom = null;
+    [0, ...days, calDays(start, end) + 2].reduce((prev, cur) => {
+      if (cur - prev - 1 > maxGap) { maxGap = cur - prev - 1; gapFrom = addDays(start, prev); }
+      return cur;
+    });
+    const flags = [];
+    if (elapsed > CYCLE_MAX_LEN) flags.push(`${elapsed} days long — likely a missed period start`);
+    if (maxGap >= CYCLE_GAP_FLAG) flags.push(`${maxGap}-day logging gap from ${fmtShort(gapFrom)}`);
+    return { start, next, length, elapsed, complete: !!next, rows, maxGap, flags, valid: !!next && !flags.length };
+  });
+}
+function cycleFlagNote(c) {
+  return `Flagged: ${c.flags.join('; ')}. Excluded from cross-cycle stats — if a period was missed, add its start via "Edit cycle starts".`;
+}
+
 // Cross-tab glance stats — always computed over full history, rendered
 // once per data load into the header strip (visible regardless of active tab).
 function renderHeaderStats() {
@@ -1072,6 +1112,7 @@ async function loadData() {
           tempHi: parseFloat(row['Weather Temp High (°F)']) || null,
           humidity: parseFloat(row['Humidity (%)']) || null,
           justin: classifyJustin(row['Justin?']),
+          valtrex: (row['Valtrex Taken'] || '').toLowerCase() === 'yes',
         };
       })
       .filter(r => r.date)
@@ -1692,7 +1733,9 @@ function buildCycle() {
   const rangeLabelShort = range.end ? `${fmtShort(range.start)} – ${fmtShort(range.end)}` : `since ${fmtShort(range.start)}`;
   const ovulationDate = new Date(range.start.getTime() + 13*86400000);
   const lutealDate = new Date(range.start.getTime() + 20*86400000);
-  banner.innerHTML = `<strong>${cycleLabel}: ${rangeLabelLong}.</strong> Auto-detected from logged "Menstrual Cycle: Yes" days. Cycle days are calculated from this start — ovulation estimated at day 14 (~${fmtShort(ovulationDate)}), luteal window begins ~day 21 (~${fmtShort(lutealDate)}).`;
+  const thisCycle = buildCycles(allData, cycleStarts).find(c => c.start.getTime() === range.start.getTime());
+  const flagHtml = thisCycle && thisCycle.flags.length ? `<span class="small-sample-note">${cycleFlagNote(thisCycle)}</span>` : '';
+  banner.innerHTML = `<strong>${cycleLabel}: ${rangeLabelLong}.</strong> Auto-detected from logged "Menstrual Cycle: Yes" days. Cycle days are calculated from this start — ovulation estimated at day 14 (~${fmtShort(ovulationDate)}), luteal window begins ~day 21 (~${fmtShort(lutealDate)}).${flagHtml}`;
 
   document.getElementById('strip-cycle').innerHTML = `
     <div class="stat"><div class="stat-label">Cycle entries</div><div class="stat-value">${cycData.length}</div><div class="stat-sub">${rangeLabelShort}</div></div>
