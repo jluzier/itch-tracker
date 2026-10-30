@@ -63,6 +63,8 @@ Built only on existing sheet columns — no form changes.
       small samples, "6.2 vs 3.1" can read as a stronger signal than it is. Added
       `n=` and min–max range to the alcohol, Vanicream, and histamine callouts, plus a
       "small sample" caution note (n<5) across those and the four cycle-phase callouts.
+      The alcohol and Vanicream callouts were later removed from the Timeline tab as less
+      of a focus; both remain in the Combinations card and the Visit Summary factor table.
 - [x] Multi-factor combinations — Combinations card on the Factors tab. Pick any two
       factors: categorical × categorical shows grouped bars with n per cell (cells under
       n=3 hidden); categorical × numeric shows a scatter split by group with r per group.

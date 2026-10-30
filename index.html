@@ -598,14 +598,6 @@
         <div class="chart-container" style="height:200px;"><canvas id="chart-dist"></canvas></div>
       </div>
     </div>
-    <div class="two-col">
-      <div class="callout callout-red">
-        <div id="insight-alcohol"></div>
-      </div>
-      <div class="callout callout-teal">
-        <div id="insight-vanicream"></div>
-      </div>
-    </div>
     <div class="callout callout-blue">
       <div id="insight-fluconazole"></div>
     </div>
@@ -1975,34 +1967,6 @@ function buildTimeline() {
     <div class="stat"><div class="stat-label">Severe days</div><div class="stat-value" style="color:var(--red)">${severe}</div><div class="stat-sub">itch ≥ 7 (${Math.round(severe/d.length*100)}%)</div></div>
     <div class="stat"><div class="stat-label">Low days</div><div class="stat-value" style="color:var(--teal)">${low}</div><div class="stat-sub">itch ≤ 2 (${Math.round(low/d.length*100)}%)</div></div>
   `;
-
-  // Alcohol / Vanicream insight callouts
-  const alcoholOnArr = d.filter(r=>r.alcohol);
-  const alcoholOffArr = d.filter(r=>!r.alcohol);
-  const alcAtOrAbove4 = alcoholOnArr.filter(r=>r.itch>=4).length;
-  const alcEl = document.getElementById('insight-alcohol');
-  if (alcoholOnArr.length) {
-    const pct = Math.round(alcAtOrAbove4/alcoholOnArr.length*100);
-    const alcOnVals = alcoholOnArr.map(r=>r.itch);
-    const alcOffVals = alcoholOffArr.map(r=>r.itch);
-    alcEl.innerHTML = `<strong>Alcohol</strong> ${alcAtOrAbove4} of ${alcoholOnArr.length} alcohol days (${pct}%) show itch ≥4 — avg ${statsFmt(alcOnVals)} vs ${statsFmt(alcOffVals)} without.${pct===100 ? ' No exceptions in the current dataset.' : ''}${smallSampleNote(alcOnVals, alcOffVals)}`;
-  } else {
-    alcEl.innerHTML = `<strong>Alcohol</strong> No alcohol days logged yet.`;
-  }
-
-  const vcOnArr = d.filter(r=>r.vanicream);
-  const vcOffArr = d.filter(r=>!r.vanicream);
-  const vcEl = document.getElementById('insight-vanicream');
-  if (vcOnArr.length && vcOffArr.length) {
-    const vcOnVals = vcOnArr.map(r=>r.itch);
-    const vcOffVals = vcOffArr.map(r=>r.itch);
-    const vcOnAvg = avg(vcOnVals);
-    const vcOffAvg = avg(vcOffVals);
-    const direction = vcOnAvg < vcOffAvg ? 'lower' : 'higher';
-    vcEl.innerHTML = `<strong>Vanicream</strong> Days using Vanicream shampoo/conditioner average ${statsFmt(vcOnVals)} itch vs ${statsFmt(vcOffVals)} on other days — ${Math.abs(vcOnAvg-vcOffAvg).toFixed(1)} points ${direction}.${smallSampleNote(vcOnVals, vcOffVals)}`;
-  } else {
-    vcEl.innerHTML = `<strong>Vanicream</strong> Not enough data yet to compare Vanicream vs other products.`;
-  }
 
   // Full history, not the range filter, so the before-course baseline isn't cut off.
   document.getElementById('insight-fluconazole').innerHTML = `<strong>Fluconazole</strong> ${courseText()}`;
