@@ -289,6 +289,10 @@
     content: ''; position: absolute; top: 2px; right: 2px;
     width: 4px; height: 4px; border-radius: 50%; background: currentColor;
   }
+  .hm-cell.hm-fz::before {
+    content: ''; position: absolute; left: 2px; right: 2px; bottom: 1px;
+    height: 3px; border-radius: 2px; background: var(--blue);
+  }
   .hm-head { font-size: 9px; color: var(--text-ter); text-align: center; padding: 2px 0; border-radius: 3px; }
   .hm-head.hm-pms { background: var(--amber-lt); color: var(--amber); }
   .hm-label { font-size: 10px; color: var(--text-sec); align-self: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px; }
@@ -581,6 +585,7 @@
         <div class="legend-item"><div class="legend-dot" style="background:#B53030;"></div> Severe (7–10)</div>
         <div class="legend-item"><div class="legend-dot" style="background:#B86E0A;"></div> Moderate (4–6)</div>
         <div class="legend-item"><div class="legend-dot" style="background:#1F6E56;"></div> Low (0–3)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(70,130,200,0.45);border-radius:2px;"></div> Fluconazole course</div>
       </div>
     </div>
     <div class="two-col">
@@ -600,6 +605,9 @@
       <div class="callout callout-teal">
         <div id="insight-vanicream"></div>
       </div>
+    </div>
+    <div class="callout callout-blue">
+      <div id="insight-fluconazole"></div>
     </div>
     <div class="callout callout-amber">
       <div id="insight-gaps"></div>
@@ -671,7 +679,8 @@
 
   <!-- ── VIEW 5: VISIT SUMMARY ── -->
   <div id="view-summary" class="view">
-    <div class="no-print" style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+    <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+      <div class="range-filter" id="summary-range-filter" style="margin-bottom:0;flex-wrap:wrap;"></div>
       <button class="pill-tab active" onclick="window.print()">Print / save as PDF</button>
     </div>
     <div class="summary-page" id="summary-body"></div>
@@ -1017,6 +1026,87 @@ function cycleFlagNote(c) {
   return `Flagged: ${c.flags.join('; ')}. Excluded from cross-cycle stats — if a period was missed, add its start via "Edit cycle starts".`;
 }
 
+// ── Fluconazole course ─────────────────────────────────
+// Daily course: first through last "Yes" day. Before/After are fixed 21-day
+// windows either side, so the comparison isn't skewed by how long logging ran.
+const COURSE_WINDOW = 21;
+let flucCourse = null;
+function fluconazoleCourse(data) {
+  const doses = data.filter(r => r.fluconazole);
+  if (!doses.length) return null;
+  const start = startOfDay(doses[0].date), end = startOfDay(doses[doses.length - 1].date);
+  const lastLog = data[data.length - 1].date;
+  const byDay = new Map();
+  data.filter(r => calDays(start, r.date) >= 0 && calDays(r.date, end) >= 0)
+    .forEach(r => { const k = toISODate(r.date); byDay.set(k, byDay.get(k) || r.fluconazole); });
+  const span = calDays(start, end) + 1;
+  const doseDays = [...byDay.values()].filter(Boolean).length;
+  return {
+    start, end, span, doseDays,
+    missedDays: byDay.size - doseDays,
+    unloggedDays: span - byDay.size,
+    ongoing: calDays(end, lastLog) <= 1,
+    dayOfCourse: calDays(start, lastLog) + 1,
+  };
+}
+function coursePeriod(date, course = flucCourse) {
+  if (!course) return null;
+  const fromStart = calDays(course.start, date), fromEnd = calDays(course.end, date);
+  if (fromStart < 0) return fromStart >= -COURSE_WINDOW ? 'Before' : null;
+  if (fromEnd <= 0) return 'During';
+  return !course.ongoing && fromEnd <= COURSE_WINDOW ? 'After' : null;
+}
+function coursePeriodVals(data, course = flucCourse) {
+  const out = { Before: [], During: [], After: [] };
+  data.forEach(r => { const p = coursePeriod(r.date, course); if (p) out[p].push(r.itch); });
+  return out;
+}
+// Each logged course day vs. the same cycle day (counted from period start) in
+// complete, unflagged cycles that ended before the course began.
+function courseCycleMatch(data, course = flucCourse) {
+  if (!course || !cycleStarts.length) return null;
+  const base = buildCycles(data, cycleStarts)
+    .filter(c => c.valid && calDays(c.next, course.start) >= 0)
+    .map(c => {
+      const m = new Map();
+      c.rows.forEach(r => (m.get(r.cd) || m.set(r.cd, []).get(r.cd)).push(r.itch));
+      return m;
+    });
+  if (!base.length) return { n: 0, nCycles: 0 };
+  const diffs = [];
+  dayIndex(data).forEach((day, iso) => {
+    const date = localDateFromISO(iso);
+    if (coursePeriod(date, course) !== 'During') return;
+    const s = cycleStarts.filter(st => calDays(st, date) >= 0).pop();
+    if (!s) return;
+    const cd = calDays(s, date) + 1;
+    const vals = base.map(m => m.get(cd)).filter(Boolean).map(avg);
+    if (vals.length) diffs.push(avg(day.vals) - avg(vals));
+  });
+  return { n: diffs.length, nCycles: base.length, diff: avg(diffs) };
+}
+function courseText(course = flucCourse, data = allData) {
+  if (!course) return 'No Fluconazole doses logged yet. Once "Fluconazole Taken" is marked Yes, this compares itch before, during, and after the course.';
+  const status = course.ongoing
+    ? `Day ${course.dayOfCourse} of course, started ${fmtShort(course.start)}`
+    : `${fmtShort(course.start)} – ${fmtShort(course.end)} (${course.span} days)`;
+  const doses = `${course.doseDays} dose day${course.doseDays === 1 ? '' : 's'} logged` +
+    (course.missedDays ? `, ${course.missedDays} logged without a dose` : '') +
+    (course.unloggedDays ? `, ${course.unloggedDays} not logged` : '');
+  const p = coursePeriodVals(data, course);
+  const after = course.ongoing ? '' : `; ${COURSE_WINDOW} days after ${statsFmt(p.After)}`;
+  const m = courseCycleMatch(data, course);
+  let matchTxt = '';
+  if (m && m.n) {
+    const dir = m.diff < 0 ? 'lower' : 'higher';
+    matchTxt = ` Cycle-matched: during the course itch ran ${Math.abs(m.diff).toFixed(1)} ${dir} than the same cycle days in ${m.nCycles} earlier cycle${m.nCycles === 1 ? '' : 's'} (n=${m.n} days).`;
+  } else if (m) {
+    matchTxt = ' Cycle-matched comparison needs at least one complete, unflagged cycle before the course.';
+  }
+  return `${status} · ${doses}. Avg itch ${COURSE_WINDOW} days before ${statsFmt(p.Before)}; during ${statsFmt(p.During)}${after}.${matchTxt}` +
+    smallSampleNote(p.Before, p.During, course.ongoing ? [] : p.After);
+}
+
 // ── Cycle heatmap ──────────────────────────────────────
 // 'before' lines every period start up in the same column, showing the 21 days
 // leading into it and the first 7 days of the period. Luteal length is fairly
@@ -1032,10 +1122,11 @@ function dayIndex(data) {
   const byDay = new Map();
   data.forEach(r => {
     const k = toISODate(r.date);
-    const e = byDay.get(k) || { vals: [], locs: [], valtrex: false };
+    const e = byDay.get(k) || { vals: [], locs: [], valtrex: false, fluconazole: false };
     e.vals.push(r.itch);
     if (r.location) e.locs.push(r.location.trim());
     e.valtrex = e.valtrex || r.valtrex;
+    e.fluconazole = e.fluconazole || r.fluconazole;
     byDay.set(k, e);
   });
   return byDay;
@@ -1043,8 +1134,8 @@ function dayIndex(data) {
 function hmCell(day, date, dayText, extraCls, base) {
   if (!day) return `<div class="hm-cell hm-empty ${extraCls}" title="${fmtShort(date)} · ${dayText} · not logged"></div>`;
   const v = Math.round(avg(day.vals) * 10) / 10;
-  const tip = `${fmtShort(date)} · ${dayText} · itch ${v}${day.locs.length ? ' · ' + day.locs.join('; ') : ''}${day.valtrex ? ' · Valtrex taken' : ''}`;
-  return `<div class="hm-cell ${v >= 6 ? 'hm-hi' : ''} ${day.valtrex ? 'hm-vx' : ''} ${extraCls}" style="background:${heatFill(v, base)}" title="${esc(tip)}">${Math.round(v)}</div>`;
+  const tip = `${fmtShort(date)} · ${dayText} · itch ${v}${day.locs.length ? ' · ' + day.locs.join('; ') : ''}${day.valtrex ? ' · Valtrex taken' : ''}${day.fluconazole ? ' · Fluconazole taken' : ''}`;
+  return `<div class="hm-cell ${v >= 6 ? 'hm-hi' : ''} ${day.valtrex ? 'hm-vx' : ''} ${day.fluconazole ? 'hm-fz' : ''} ${extraCls}" style="background:${heatFill(v, base)}" title="${esc(tip)}">${Math.round(v)}</div>`;
 }
 function cycleHeatmapHtml(data, cycles, align, base = 'var(--surface)') {
   const byDay = dayIndex(data);
@@ -1097,6 +1188,7 @@ function cycleHeatmapKey(align, base = 'var(--surface)') {
     : `<span><span class="hm-sw" style="background:var(--text-ter)"></span>day 6: end of menses window</span>`;
   return `<span>Itch 0<span class="hm-ramp">${ramp}</span>10</span>
     <span>● Valtrex taken</span>
+    ${flucCourse ? '<span><span class="hm-sw" style="background:var(--blue);height:3px"></span>Fluconazole taken</span>' : ''}
     <span><span class="hm-sw" style="border:1px dashed var(--text-ter)"></span>not logged</span>
     ${marks}
     <span>† flagged cycle (dimmed)</span>`;
@@ -1380,6 +1472,7 @@ async function loadData() {
           humidity: parseFloat(row['Humidity (%)']) || null,
           justin: classifyJustin(row['Justin?']),
           valtrex: (row['Valtrex Taken'] || '').toLowerCase() === 'yes',
+          fluconazole: (row['Fluconazole Taken'] || '').toLowerCase() === 'yes',
         };
       })
       .filter(r => r.date)
@@ -1388,6 +1481,7 @@ async function loadData() {
     cycleStarts = computeCycleStarts(allData);
     cycleStartDetected = cycleStarts.length > 0;
     if (cycleStartDetected) CYCLE_START = cycleStarts[cycleStarts.length - 1];
+    flucCourse = fluconazoleCourse(allData);
 
     document.getElementById('last-updated').textContent = 'Last fetched: ' + new Date().toLocaleTimeString();
     document.getElementById('entry-count').textContent = allData.length + ' entries';
@@ -1415,13 +1509,42 @@ function buildAll() {
 
 // ── Visit summary (printable) ──────────────────────────
 const SUMMARY_GAP_DAYS = 14;
-function summaryCutoff(data) {
-  for (let i = data.length - 1; i > 0; i--) {
-    const gap = (data[i].date - data[i-1].date) / 86400000;
-    if (gap > SUMMARY_GAP_DAYS) return { cutoff: data[i-1].date, gapDays: Math.round(gap) };
+let summaryRangeKey = 'all';
+// Logging gaps longer than SUMMARY_GAP_DAYS, as the last logged day before and first day after.
+function bigGaps(data) {
+  const out = [];
+  for (let i = 1; i < data.length; i++) {
+    const days = calDays(data[i-1].date, data[i].date);
+    if (days > SUMMARY_GAP_DAYS) out.push({ before: data[i-1].date, after: data[i].date, missing: days - 1 });
   }
-  return { cutoff: data.length ? data[data.length-1].date : null, gapDays: 0 };
+  return out;
 }
+function summaryRanges(data) {
+  const last = data.length ? startOfDay(data[data.length - 1].date) : null;
+  const gaps = bigGaps(data);
+  const opts = [
+    { key: 'all', label: 'All time', from: null, to: null },
+    { key: 90, label: 'Last 90 days', from: last && addDays(last, -89), to: null },
+    { key: 30, label: 'Last 30 days', from: last && addDays(last, -29), to: null },
+  ];
+  if (gaps.length) opts.push({ key: 'gap', label: `Since ${fmtShort(gaps[gaps.length - 1].after)}`, from: gaps[gaps.length - 1].after, to: null });
+  if (flucCourse) opts.push({ key: 'course', label: 'Fluconazole course',
+    from: addDays(flucCourse.start, -COURSE_WINDOW), to: flucCourse.ongoing ? null : addDays(flucCourse.end, COURSE_WINDOW) });
+  return opts;
+}
+function setSummaryRange(k) { summaryRangeKey = k; buildSummary(); }
+// Longer ranges can run past one letter page; shrink to fit when printing.
+// Measured at the printed content width (8.5in − 2×0.5in padding) against 10in of height.
+const PRINT_W = 720, PRINT_H = 940;
+window.addEventListener('beforeprint', () => {
+  const b = document.getElementById('summary-body');
+  const old = b.getAttribute('style') || '';
+  b.setAttribute('style', `width:${PRINT_W}px;padding:0;border:none`);
+  const h = b.offsetHeight;
+  b.setAttribute('style', old);
+  b.style.zoom = h > PRINT_H ? (PRINT_H / h).toFixed(3) : '';
+});
+window.addEventListener('afterprint', () => { document.getElementById('summary-body').style.zoom = ''; });
 function fmtDate(d) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
@@ -1435,7 +1558,11 @@ function sparkSvg(rows, start, end) {
     if (i > 0 && (r.date - rows[i-1].date) / 86400000 > 3) runs.push([]);
     runs[runs.length-1].push(`${X(r.date).toFixed(1)},${Y(r.itch).toFixed(1)}`);
   });
+  const band = flucCourse && calDays(flucCourse.start, end) >= 0 && calDays(start, flucCourse.end) >= 0
+    ? `<rect x="${Math.max(0, X(flucCourse.start)).toFixed(1)}" width="${(Math.min(W, X(addDays(flucCourse.end, 1))) - Math.max(0, X(flucCourse.start))).toFixed(1)}" y="0" height="${H}" fill="#1A5A9A" opacity="0.12"/>`
+    : '';
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:48px;display:block;">
+    ${band}
     <line x1="0" x2="${W}" y1="${Y(7)}" y2="${Y(7)}" stroke="#B53030" stroke-dasharray="4 4" stroke-width="1" vector-effect="non-scaling-stroke" opacity="0.5"/>
     ${runs.filter(p => p.length).map(p => `<polyline points="${p.join(' ')}" fill="none" stroke="#1F6E56" stroke-width="2" vector-effect="non-scaling-stroke"/>`).join('')}
   </svg>`;
@@ -1455,11 +1582,16 @@ function corrRow(factor, pairs) {
   return `<tr><td>${factor}</td><td>${txt} · n=${pairs.length}${small}</td></tr>`;
 }
 function buildSummary() {
-  const { cutoff, gapDays } = summaryCutoff(allData);
-  const rows = allData.filter(r => r.date <= cutoff);
-  const excluded = allData.length - rows.length;
-  if (!rows.length) { document.getElementById('summary-body').innerHTML = 'No data yet.'; return; }
+  const ranges = summaryRanges(allData);
+  if (!ranges.some(o => o.key === summaryRangeKey)) summaryRangeKey = 'all';
+  const sel = ranges.find(o => o.key === summaryRangeKey);
+  document.getElementById('summary-range-filter').innerHTML = ranges.map(o =>
+    `<button class="pill-tab ${o.key === summaryRangeKey ? 'active' : ''}" onclick="setSummaryRange(${typeof o.key === 'number' ? o.key : `'${o.key}'`})">${o.label}</button>`).join('');
+  const rows = allData.filter(r => (!sel.from || calDays(sel.from, r.date) >= 0) && (!sel.to || calDays(r.date, sel.to) >= 0));
+  if (!rows.length) { document.getElementById('summary-body').innerHTML = 'No data in this range.'; return; }
   const first = rows[0].date, last = rows[rows.length-1].date;
+  const gapsIn = bigGaps(rows);
+  const gapTxt = gapsIn.map(g => `${g.missing}-day logging gap (${fmtShort(addDays(g.before, 1))} – ${fmtShort(addDays(g.after, -1))})`).join(', ');
   const periodDays = Math.round((last - first) / 86400000) + 1;
   const coverage = Math.round(rows.length / periodDays * 100);
   const itch = rows.map(r => r.itch);
@@ -1491,12 +1623,17 @@ function buildSummary() {
     corrRow('Humidity vs itch', rows.filter(r => r.humidity != null).map(r => ({ x: r.humidity, y: r.itch }))),
   ].join('');
 
+  // Course stats use their own before/during/after windows over all data, independent of the range.
+  const treatHtml = flucCourse && calDays(flucCourse.start, last) >= 0 && calDays(first, flucCourse.end) >= 0 ? `
+    <div class="sum-section">Treatment: Fluconazole <span class="sum-note">daily course · shaded on the trend line above</span></div>
+    <div class="sum-cyc-text">${courseText()}</div>` : '';
+
   // Cycle pattern: same heatmap/table as the Cycle tab, limited to the summary period.
-  const sumCycles = buildCycles(rows, cycleStarts.filter(s => calDays(s, cutoff) >= 0));
+  const sumCycles = buildCycles(rows, cycleStarts.filter(s => calDays(first, s) >= 0 && calDays(s, last) >= 0));
   const cycleHtml = sumCycles.length ? `
     <div class="sum-section">Cycle pattern <span class="sum-note">one row per period start · itch for the 21 days before and first 7 days of each period</span></div>
     <div class="sum-hm">${cycleHeatmapHtml(rows, sumCycles, 'before')}</div>
-    <div class="hm-key sum-small">Cell = itch 0–10 · ● Valtrex · dashed = not logged · red edge = period day 1 · shaded = premenstrual week</div>
+    <div class="hm-key sum-small">Cell = itch 0–10 · ● Valtrex${flucCourse ? ' · blue bar = Fluconazole' : ''} · dashed = not logged · red edge = period day 1 · shaded = premenstrual week</div>
     <div class="sum-cyc-text">${pooledCycleText(sumCycles)}</div>
     <div class="sum-cyc-table">${cycleTableHtml(sumCycles)}</div>` : '';
 
@@ -1532,7 +1669,7 @@ function buildSummary() {
 
   document.getElementById('summary-body').innerHTML = `
     <div class="sum-h">Itch tracker summary</div>
-    <div class="sum-sub">${fmtDate(first)} – ${fmtDate(last)} · ${rows.length} days logged (${coverage}% of period) · self-reported daily entries</div>
+    <div class="sum-sub">${fmtDate(first)} – ${fmtDate(last)} · ${rows.length} days logged (${coverage}% of period) · self-reported daily entries${gapTxt ? ` · includes a ${gapTxt}` : ''}</div>
     <div class="sum-grid">${kpis}</div>
     <div class="sum-spark-wrap">${sparkSvg(rows, first, last)}</div>
     <div class="sum-spark-dates"><span>${fmtDate(first)}</span><span>dashed line = itch 7</span><span>${fmtDate(last)}</span></div>
@@ -1540,11 +1677,11 @@ function buildSummary() {
       <thead><tr><th style="width:30%">Factor</th><th>Average itch or correlation with itch</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
+    ${treatHtml}
     ${cycleHtml}
     <div class="sum-two-col"><div>${locationHtml}</div><div>${excerptHtml}</div></div>
     <div class="sum-foot">
-      ${excluded ? `Entries after ${fmtDate(cutoff)} (${excluded}) are excluded because of a ${gapDays}-day logging gap. ` : ''}
-      Self-reported and observational: patterns are associations, not causes, and are not adjusted for medications or other factors.
+      Self-reported and observational: patterns are associations, not causes, and are not adjusted for Valtrex use or other factors.
       Correlations use same-day values. Groups with n&lt;${SMALL_SAMPLE_N} are flagged as small samples.
       Cycle windows count back from the next logged period start; cycles over ${CYCLE_MAX_LEN} days or with a ${CYCLE_GAP_FLAG}+ day logging gap are excluded (†).
     </div>`;
@@ -1558,6 +1695,8 @@ const COMBO_FACTORS = [
     value: r => r.alcohol ? 'Yes' : 'No' },
   { key: 'vanicream', label: 'Vanicream',   type: 'cat', levels: ['Yes','No'],
     value: r => r.vanicream ? 'Yes' : 'No' },
+  { key: 'fluconazole', label: 'Fluconazole', type: 'cat', levels: ['Before','During','After'],
+    value: r => coursePeriod(r.date) },
   { key: 'phase',     label: 'Cycle phase', type: 'cat', levels: ['Menses','Follicular','Ovulation','Luteal'],
     value: r => phaseLabel(r.date) },
   { key: 'stress',    label: 'Stress',      type: 'num', value: r => r.stress },
@@ -1608,7 +1747,7 @@ function buildCombos() {
     const pts = rows.map(x => ({ c: catIsA ? x.a : x.b, v: catIsA ? x.b : x.a, itch: x.itch }));
     return renderComboCatNum(catIsA ? A : B, catIsA ? B : A, pts);
   }
-  insightEl.innerHTML = 'Two numeric factors are shown on the Factors tab. Pick a categorical factor (Justin, alcohol, Vanicream, cycle phase) to split by.';
+  insightEl.innerHTML = 'Two numeric factors are shown on the Factors tab. Pick a categorical factor (Justin, alcohol, Vanicream, Fluconazole, cycle phase) to split by.';
 }
 function renderComboCatCat(A, B, rows) {
   const cellVals = (al, bl) => rows.filter(x => x.a === al && x.b === bl).map(x => x.itch);
@@ -1795,6 +1934,27 @@ function buildFactors() {
 }
 
 // ── VIEW 1: Timeline ───────────────────────────────────
+// Shades the Fluconazole course behind the timeline (category x axis, one point per row).
+function courseBandPlugin(rows) {
+  return {
+    id: 'courseBand',
+    beforeDatasetsDraw(chart) {
+      const idx = rows.map((r, i) => coursePeriod(r.date) === 'During' ? i : -1).filter(i => i >= 0);
+      if (!idx.length) return;
+      const { ctx, chartArea, scales: { x } } = chart;
+      const half = rows.length > 1 ? (x.getPixelForValue(1) - x.getPixelForValue(0)) / 2 : 10;
+      const x0 = Math.max(chartArea.left, x.getPixelForValue(idx[0]) - half);
+      const x1 = Math.min(chartArea.right, x.getPixelForValue(idx[idx.length - 1]) + half);
+      ctx.save();
+      ctx.fillStyle = document.documentElement.dataset.theme === 'dark' ? 'rgba(90,150,220,0.16)' : 'rgba(26,90,154,0.12)';
+      ctx.fillRect(x0, chartArea.top, x1 - x0, chartArea.bottom - chartArea.top);
+      ctx.fillStyle = cssVar('--text-sec');
+      ctx.font = '10px sans-serif';
+      ctx.fillText('Fluconazole', x0 + 4, chartArea.top + 12);
+      ctx.restore();
+    },
+  };
+}
 function buildTimeline() {
   renderRangeFilter('timeline-range-filter', timelineRangeDays, 'setTimelineRange');
 
@@ -1844,6 +2004,9 @@ function buildTimeline() {
     vcEl.innerHTML = `<strong>Vanicream</strong> Not enough data yet to compare Vanicream vs other products.`;
   }
 
+  // Full history, not the range filter, so the before-course baseline isn't cut off.
+  document.getElementById('insight-fluconazole').innerHTML = `<strong>Fluconazole</strong> ${courseText()}`;
+
   const gapsEl = document.getElementById('insight-gaps');
   if (!gaps.length) {
     gapsEl.innerHTML = `<strong>Logging gaps</strong> No gaps — every day in range has a log entry. Current streak: ${streak} day${streak===1?'':'s'}.`;
@@ -1880,6 +2043,7 @@ function buildTimeline() {
           const parts = [`Itch: ${r.itch}`];
           if (r.alcohol) parts.push('Alcohol: yes');
           if (r.justin) parts.push(`Justin: ${justinLabel(r.justin)}`);
+          if (r.fluconazole) parts.push('Fluconazole: taken');
           if (r.notes) parts.push(r.notes.substring(0,50));
           return parts;
         }}}
@@ -1888,7 +2052,8 @@ function buildTimeline() {
         x: { ticks: { ...tickOpts(), maxRotation: 45, autoSkip: true }, grid: gridOpts() },
         y: { min: 0, max: 10, ticks: tickOpts(), grid: gridOpts() }
       }
-    }
+    },
+    plugins: [courseBandPlugin(d)],
   });
 
   // Peak time chart

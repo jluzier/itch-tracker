@@ -9,14 +9,12 @@ than opening issues for the whole backlog up front.
 
 Cross-group priority order for the open items below:
 
-1. Cycle pattern items (below) — the leading theory is a menstrual-cycle link (APD);
-   these make the pattern checkable across cycles and shareable with doctors.
-2. CSV/JSON export (Clinical) — small and self-contained.
-3. Colorblind-safe severity (UX) — mostly limited to the timeline chart points.
-4. PCP visit summary (Clinical) — needs layout decisions.
-5. Lagged-effect view (Data & Insights) — deferred while the cycle theory is explored.
-6. Treatments tried (Clinical) — deferred: needs a new form field, and the form is not
-   changing for now.
+1. CSV/JSON export (Clinical) — small and self-contained.
+2. Colorblind-safe severity (UX) — mostly limited to the timeline chart points.
+3. PCP visit summary (Clinical) — needs layout decisions.
+4. Lagged-effect view (Data & Insights) — deferred while the cycle theory is explored.
+5. Treatments tried, generic (Clinical) — deferred: needs a new form field, and the form
+   is not changing for now. Fluconazole is covered by its own column (see below).
 
 ## Cycle Pattern
 
@@ -79,10 +77,24 @@ Built only on existing sheet columns — no form changes.
 
 - [x] Printable one-page visit summary — Visit Summary tab with coverage, KPIs, itch
       sparkline, factor table with n, itch locations, and severe-day note excerpts.
-      Print CSS limits output to one letter page. Data is cut off before the most recent
-      14+ day logging gap.
-- [ ] Visit summary: treatments tried — add a field for medications and topical
-      treatments so the summary can show what was used during each period.
+      Print CSS limits output to one letter page. Date range is selectable (see below).
+- [x] Fluconazole course tracking — parses the sheet's `Fluconazole Taken` column (daily
+      3-week course from a new dermatologist). The course runs from the first to last "Yes"
+      day. A Timeline callout compares avg itch 21 days before / during / 21 days after
+      (with n), plus a cycle-matched line: each course day vs. the same cycle day in
+      complete, unflagged cycles that ended before the course, so a normal cycle swing
+      isn't credited to the drug. Course is shaded on the Timeline chart and summary
+      sparkline, dose days get a blue bar on the cycle heatmaps, Fluconazole
+      (Before/During/After) is a Combinations factor, and the Visit Summary gets a
+      Treatment section.
+- [ ] Visit summary: treatments tried (generic) — a single field for any medication or
+      topical treatment. Still deferred (form change); add per-med columns like
+      Fluconazole in the meantime.
+- [x] Visit summary range picker — All time (default) / Last 90 / Last 30 / Since the
+      last 14+ day logging gap / Fluconazole course (21 days either side). Replaces the
+      old fixed cutoff before the most recent gap, which had started hiding everything
+      after the Aug–Sep gap. Gaps inside the range are noted in the header line, and the
+      page scales down on print when a long range would spill onto a second page.
 - [ ] CSV/JSON export of the processed dataset, for handing to a provider directly
       rather than linking the raw sheet.
 - [ ] Visit summary: PCP version — broader overall-burden framing (sleep, stress,
