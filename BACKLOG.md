@@ -97,6 +97,8 @@ Built only on existing sheet columns — no form changes.
       old fixed cutoff before the most recent gap, which had started hiding everything
       after the Aug–Sep gap. Gaps inside the range are noted in the header line, and the
       page scales down on print when a long range would spill onto a second page.
+      The cycle section ignores the range and always shows all logged cycles (labeled
+      as such) — short ranges otherwise dropped every complete cycle.
 - [ ] CSV/JSON export of the processed dataset, for handing to a provider directly
       rather than linking the raw sheet.
 - [ ] Visit summary: PCP version — broader overall-burden framing (sleep, stress,

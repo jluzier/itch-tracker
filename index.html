@@ -1620,11 +1620,12 @@ function buildSummary() {
     <div class="sum-section">Treatment: Fluconazole <span class="sum-note">daily course · shaded on the trend line above</span></div>
     <div class="sum-cyc-text">${courseText()}</div>` : '';
 
-  // Cycle pattern: same heatmap/table as the Cycle tab, limited to the summary period.
-  const sumCycles = buildCycles(rows, cycleStarts.filter(s => calDays(first, s) >= 0 && calDays(s, last) >= 0));
+  // Cycle pattern: same heatmap/table as the Cycle tab, always over full history.
+  // It's the long-term baseline; a short range would drop every complete cycle.
+  const sumCycles = buildCycles(allData, cycleStarts);
   const cycleHtml = sumCycles.length ? `
-    <div class="sum-section">Cycle pattern <span class="sum-note">one row per period start · itch for the 21 days before and first 7 days of each period</span></div>
-    <div class="sum-hm">${cycleHeatmapHtml(rows, sumCycles, 'before')}</div>
+    <div class="sum-section">Cycle pattern <span class="sum-note">all logged cycles${summaryRangeKey === 'all' ? '' : ', not just the selected range'} · one row per period start · itch for the 21 days before and first 7 days of each period</span></div>
+    <div class="sum-hm">${cycleHeatmapHtml(allData, sumCycles, 'before')}</div>
     <div class="hm-key sum-small">Cell = itch 0–10 · ● Valtrex${flucCourse ? ' · blue bar = Fluconazole' : ''} · dashed = not logged · red edge = period day 1 · shaded = premenstrual week</div>
     <div class="sum-cyc-text">${pooledCycleText(sumCycles)}</div>
     <div class="sum-cyc-table">${cycleTableHtml(sumCycles)}</div>` : '';
